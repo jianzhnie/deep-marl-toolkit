@@ -1,0 +1,145 @@
+# --- Algorithm specific parameters ---
+
+use_local_action : False
+use_popart: True
+
+# ---- TODO: 重要的开关参数 ----
+train_ship_only : False  # 是否只训练船
+use_learned_ship_model : True  # 是否采用ship模型learn到的位置
+enable_staged_combat : True
+no_op_action_priority : 8
+use_tree_agent : False
+# --- Debug ---
+debug : True
+# --- Env ---
+flight_control_frequency : 3700  # 飞机控制频率
+
+# args.device = "cuda" if args.use_cuda else "cpu"
+# use_cuda : False
+# device : "cpu"
+use_cuda : False
+# device : "cuda"
+
+n_agents : 11  #原来是4?
+
+# --- state space ---
+enable_relative_representation : True  # TODO:针对研究点1：是否采用“类似卷积”的方式对所有agents的observation做处理
+agent : "rnn"
+obs_last_action : True
+obs_agent_id : False
+state_shape : 832
+obs_shape : 1216
+share_obs_space: 2048
+# state_shape : 72
+# obs_shape : 72
+
+
+# args.n_actions = (36 + 2 if not USE_LOCAL_ACTION else 18 + 2) if not args.train_ship_only else 18
+#train_ship_only : True  # 只训练船
+# n_actions : 18
+
+#train_ship_only : False  # 船、飞机都训练
+# use_local_action : True
+# n_actions : 20
+# use_local_action : False
+n_actions : 38
+
+
+
+# --- action selector ---
+action_selector : "epsilon_greedy"
+epsilon_start : 0.8
+epsilon_finish : 0.02
+epsilon_anneal_time : 200  # TODO: 单位: episode
+
+
+# --- prepare parameters ---
+data_chunk_length: 10
+gain: 0.01
+clpr_clip_param: 0.1
+prcl_min_clip_param: 0.1
+prcl_curr_clip_param: 0.2
+prcl_max_clip_param: 0.3
+clip_param_anneal_steps: 400
+double_clip_inner_eps: 0.1
+
+
+# --- Optimizer ---
+optimizer : "Adam"
+optim_alpha : 0.99  # RMSProp alpha
+opti_eps : 0.00001  # RMSProp epsilon
+grad_norm_clip : 10  # Reduce magnitude of gradients above this L2 norm
+weight_decay: 0
+
+
+# --- RL hyperparameters ---
+batch_size_run : 1
+lr : 0.0005
+critic_lr: 0.0005
+gamma : 0.99
+target_update_interval : 80  # 4 个episode更新一次（40 actors）
+episode_limit : 6
+
+# -- NN parameters --
+hidden_dim : 64
+cnn_hidden_size: 512
+coma_critic_hidden_size: 128
+recurrent_N: 1
+
+# -- ppo --
+ppo_epoch: 15
+clip_param: 0.2
+num_mini_batch: 1
+entropy_coef: 0.01
+value_loss_coef: 1
+max_grad_norm: 10.0
+gae_lambda: 0.95
+huber_delta: 10.0
+use_orthogonal: True
+use_policy_active_masks: True
+use_value_active_masks: True
+use_feature_normalization: True
+use_ReLU: True
+use_gae: True
+layer_N: 1
+qmix_hidden_dim: 32
+if_abs_AMix: True
+min_before_mix: True
+
+# -- Buffer --
+buffer_size : 8  # 1000条轨迹
+buffer_cpu_only : True
+prioritized : False
+
+# -- exploration --
+is_intrinsic: True
+rnd_predict_dim: 128
+rnd_predict_lr: 0.0001
+
+# ---- Train Ship ----
+ship_agent_num : 14
+ship_action_num : 18
+ship_qmix_embedding_dim : 128
+ship_buffer_size : 5000
+enable_multi_row : True
+row_num_of_qtable : 1
+models_type : ["mac", "mixer", "actor_opt", "critic_dict", "critic_opt"]
+
+# ---- Logger ----
+runner_log_interval : 1  # Log runner stats (not test stats) every {} episodes 画图: train return (mean,std)
+learner_log_interval : 2  # Log training stats every {} episodes  画图：train loss
+
+# 蓝方对手
+opponent_plan_num : 5
+
+# 多场景训练时，训练的区域
+train_area_list : []
+
+dist_type: 'pc'
+algs_type: 'coppo'
+# component
+buffer_component: 'coppo'
+learner_component: 'coppo'
+sampler_component: 'coppo'
+red_agent: 'coppo'
+blue_agent: 'zc'

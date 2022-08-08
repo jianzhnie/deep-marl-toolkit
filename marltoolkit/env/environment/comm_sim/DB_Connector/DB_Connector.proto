@@ -1,0 +1,316 @@
+syntax = "proto3";
+
+message DBSpatialCoord{
+	double longitude = 1;
+	double latitude = 2;
+	double altitude = 3;
+}
+
+message DBAttitudeCoord{
+	double roll = 1;
+	double pitch = 2;
+	double yaw = 3;
+}
+
+message DBVelocityCoord{
+	double Vx = 1;
+	double Vy = 2;
+	double Vz = 3;
+}
+
+//航向角
+message DBPolarDataValue{
+	double angle = 1;
+	double dataValue = 2;
+}
+
+message DBElevationDataValue{
+	double elevation = 1;
+	repeated DBPolarDataValue polarValues = 2;
+}
+
+message DBUnitCharactorData{
+	int32 dataType = 1;
+	double averagevalue = 2;
+	repeated DBPolarDataValue polarValueList = 3;
+	repeated DBElevationDataValue sphericalValueList = 4;
+	map<int32,bytes> metaDataStr = 5;
+	map<int32,double> metaDataDouble = 6;
+}
+
+message DBUnitCharactor{
+	repeated DBUnitCharactorData dataSet = 1;
+        map<int32,int32> metaDataType = 2;
+}
+
+message DBEntityState{	//KEY:State|simRunID|icounter|obseverForceSide|entityCatr
+	int32 observerForceside = 1;	//观察者阵营
+	bytes mdlID = 2;				//实体id
+	string mdlType = 3;				//实体型号
+	int32 entityCatr = 4;			//实体所属大类
+	int32 forceSide = 5;			//阵营
+	DBSpatialCoord entitySpatialCoord = 6;		//位置（经纬高）
+	DBAttitudeCoord attitude = 7;				//姿态（方位、俯仰、滚转）
+	DBVelocityCoord velocity = 8;				//速度（北天东）
+	map<string,bytes> attrMap = 9;				//属性
+	map<string,double> stateMap = 10;			//状态
+	map<string,double> dataRecorder = 11;
+	map<int32,double> logisticStates = 12;		//物资
+	map<int32,DBUnitCharactor> targetCharactors = 13;	//目标特性
+	map<int32,DBUnitCharactor> unitCapacities = 14;	//
+	double activeLvl = 15;						//血量
+	double reportTime = 16;						//上报时间
+	map<string,int32> loadMap = 17;			//搭载<type,num>
+	string missionState = 18;					//当前实体执行任务名称
+	map<string,bytes> innerstates = 19;
+	string name = 20;				//实体名称
+	string mdlClass = 21;		//实体类型
+}
+
+message DBEntityStateVec{
+	repeated DBEntityState stateVec = 1;
+}
+
+message DBMissionStateChg{
+	int64 mdlID = 1;
+	double ssimTime =2;
+	repeated string stateChange = 3;
+}
+
+message DBMissionStateChgVec{
+	repeated DBMissionStateChg missionChgVec = 1;
+}
+
+message DBSimReport{
+	int32 forceSide = 1;
+	int32 msgType = 2;
+	string msg = 3;
+}
+
+message DBSimReportVec{
+	repeated DBSimReport reportVec = 1;
+}
+
+message  DBVisualEffect{
+	int32 effectCatr = 1;
+	string effectType = 2;
+	string effectID = 3;
+	string outputString = 4;
+	double activateTime = 5;
+	int64 srcUID = 6;
+	int64 destUID = 7;
+	DBSpatialCoord srcCoord = 8;
+}
+
+message DBVisualEffectVec{
+	repeated DBVisualEffect effectVec = 1;
+}
+
+message DBTopologyChange{
+	int64 mudUID = 1;
+	int64 platformUID = 2;
+	string mdlID = 3;
+	string mdlType = 4;
+	int32 topChgType = 5;
+}
+
+message DBTopologyChangeVec{
+	repeated DBTopologyChange topChgVec = 1;
+}
+
+message DBCommanderViewChg{
+	int32 chgType = 1;
+	int32 forceSide = 2;
+	string assetID = 3;
+	string assetType = 4;
+}
+
+message DBCommanderViewChgVec{
+	repeated DBCommanderViewChg cmdViewChgVec = 1;
+}
+
+message DBCoordStruct_Report{
+
+	  double dLongitude = 1; //经度
+
+	  double dlatitude = 2; //维度
+
+	  double dHeight = 3; //高度
+}
+
+message DBVelocityStruct_Report{
+
+      double dX = 1;
+
+	  double dY = 2;
+
+	  double dZ = 3;
+}
+
+message Detection_Info_Report{	//KEY:DetectionInfoReport|simRunID|icounter
+
+	  DBCoordStruct_Report intelPosition = 1; //情报位置
+
+	  string strTargetID = 2;                     //目标ID
+
+	  string strTargetType = 3;	                 //目标类型
+
+	  string strTargetDomain = 4;	             //目标所属区域
+
+	  string strTargetModule = 5;                 //目标类型（大类）
+
+	  int32 iForceSide = 6;                       //阵营
+
+	  int32 iBadValue = 7;                       //打击效果评估
+
+	  double dIntelTime = 8;                     //情报数据时戳
+
+	  DBVelocityStruct_Report absVelocity = 9; //绝对速度
+
+	  string strDestMdlID = 10;                  //此情报供复合模型内部及上报对象使用
+
+	  string strSrcEntityID = 11;                //源实体id
+
+	  double dErrorRange = 12;                 //距离误差
+
+	  bool bIsTracking = 13;                     //是否跟踪
+
+	  bool bHasAltInf = 14;						//有高度信息
+
+	  bool bHasSpdInf = 15;						//有速度信息
+
+	  bool bHasBDAInf = 16;						//有BDA信息
+
+	  bool bHasClassificationInf = 17;           //有阵营信息
+
+	  bool bHasIdentificationInf = 18;           //有目标类型信息
+
+	  double dErrorSpd = 19;						//速度误差
+
+	  double dErrorLoc = 20;						//位置误差
+
+	  double dErrorAlt = 21;                     //高度误差
+
+	  string strSrcEntityType = 22;              //源实体类型
+
+	  string strTargetCountry = 23;              //目标国别，默认为NULL
+
+	  double dTargetActiveLvl = 24;              //目标活跃程度(毁伤)
+
+
+}
+
+message Detection_Info_Report_Vec
+{
+	repeated Detection_Info_Report DetectionInfoRp = 1;
+}
+message Attack_Hit_Report{	//KEY: AttackHitReport|simRunID|icounter
+
+	  string launch_platform_name = 1;//发射平台ID
+
+	  string launch_platform_type = 2;//发射平台型号
+
+	  string launch_platform_class = 3;//发射平台类型
+
+	  string weapon_name = 4;//武器id
+
+	  string weapon_type = 5;//武器型号
+
+	  string attack_target_name = 6;//任务目标ID
+
+	  string attack_target_type = 7;//任务目标型号
+
+	  string attack_target_class=8;	//任务目标类型
+
+	  bool is_hit = 9;       //是否命中
+
+	  string hit_target_name = 10;//命中目标ID
+
+	  string hit_target_type = 11;//命中目标型号
+
+	  string hit_target_class = 12;//命中目标类型
+
+	  double target_damage_degree = 13;//目标毁伤程度
+
+	  double weapon_damage_degree = 14;//武器毁伤能力
+
+	  double launch_time = 15; //发射时间
+
+	  double hit_time = 16; //命中时间
+
+	  double time_stampe = 17;//时间戳
+}
+
+message Attack_Hit_Report_Vec
+{
+	repeated Attack_Hit_Report attack_hit_rep = 1;
+}
+
+message DBEntityPictureItem
+{
+    string assetID = 1;
+	string assetType = 2;
+	int32 forceSide = 3;
+	DBSpatialCoord position = 4;
+	DBVelocityCoord velocity = 5;
+	DBAttitudeCoord direction = 6;
+	double reportTime = 7;
+	map<string,string>attrMap = 8;
+	map<string,double>valueMap = 9;
+	double assetActiveLvl = 10;
+}
+message DBUnitInfo	//KEy:DBUnit_Hit_Report||simRunID|icounter
+{
+    string strUnitName = 1;//编队名称
+	map<string,int32> mapWeaponCode = 2;//武器内码(武器类型，数量)
+	DBSpatialCoord UintPos = 3;//编队位置
+	map<string,bool> mapEntityName = 4;// 名称和存活状态
+	map<string,DBEntityPictureItem> mapUnitView = 5;//实体能看到什么
+	string strTaskName = 6; //任务名称
+}
+
+message DBUnitInfoVec
+{
+   repeated DBUnitInfo stuDBUnitInfoVec = 1;
+}
+
+message DBUnitHitInfo
+{
+    string strUnitName = 1;
+	map<string,bool> targetLv = 2;
+	double timestamp = 3;
+}
+
+message DBUnitHitInfoVec
+{
+	repeated DBUnitHitInfo stuDBUnitHitInfoVec = 1;
+}
+
+message	Loss{    //损耗信息
+    string	name=1;  //装备名称
+	string	type=2;  //装备型号
+	int64   time=3;     //毁灭时帧数
+	int32  	forceSide=4;     //所属阵营
+}
+
+message DBGroupUnitInfo{    //单位信息
+    string id=1;        //仿真ID
+    string name=2;      //单位名称
+    string class=3;     //单位型号
+}
+
+message DBGroupMission{ //编队任务信息
+	string	groupName=1;	//编队名称
+	string	formationType=2;	//编队类型
+	string	missionSeqName=3;	//任务名称
+	string	missionCmd=4;	//任务类型
+	int64	missionStartTime=5;	//任务开始时帧数
+	int64	missionEndTime=6;	//任务结束帧数
+	repeated DBGroupUnitInfo    missionMembers=7;	//任务参与成员
+	repeated DBGroupUnitInfo    missionTargets=8;	//任务打击目标
+	repeated DBSpatialCoord     missionArea=9;  //任务区域
+	DBGroupUnitInfo missionEscort=10;   //任务护航目标
+	string	forceSide=11;	//任务所属阵营
+	int64   orderTime=12;   //任务下达时帧数
+	string   commandUnit=13; //命令来源
+}

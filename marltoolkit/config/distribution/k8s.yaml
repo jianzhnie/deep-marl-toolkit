@@ -1,0 +1,9 @@
+# distrib_args:
+num_workers: 2
+num_testers: 1
+sample_type: 'async'
+mpts_sitation: 'k8s'
+mpts_config:
+  k8s_svc_mpts_host: 170.16.64.204
+  k8s_svc_mpts_port: 6358
+  mpts_version: 2.7.3

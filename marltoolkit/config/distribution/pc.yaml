@@ -1,0 +1,20 @@
+# distrib_args:
+num_workers: 1
+num_testers: 1
+mpts_sitation: normal
+sample_config:
+  type: 'async'
+  # num_workers: 1
+learn_config:
+  type: 'simple'
+  # num_workers: 1
+test_config:
+  type: 'simple'
+  # num_workers: 1
+mpts_config:
+  hosts:
+    - name: "mpts_0"
+      ip: "172.17.0.2"
+      ice_port: 10011
+      redis_port: 6379
+      data_base: 0

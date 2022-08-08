@@ -1,0 +1,7 @@
+# distrib_args:
+num_workers: 2
+num_testers: 1
+sample_type: 'async'
+mpts_sitation: docker
+mpts_config:
+  mpts_version: 2.7.3

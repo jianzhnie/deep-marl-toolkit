@@ -1,0 +1,309 @@
+[
+  {
+    "typecode": "F-0104",
+    "compose": [
+      {
+        "default": "4",
+        "min": "1",
+        "max": "4",
+        "alignment": "red",
+        "typecode": "01040001"
+      }
+    ],
+    "type": "Bomber_F",
+    "priority": "7"
+  },
+  {
+    "typecode": "F-0115",
+    "compose": [
+      {
+        "default": "1",
+        "min": "1",
+        "max": "6",
+        "alignment": "red",
+        "typecode": "01150001"
+      }
+    ],
+    "type": "Helicopter_F",
+    "priority": "10"
+  },
+  {
+    "typecode": "F-0208-0209",
+    "compose": [
+      {
+        "default": "2",
+        "min": "1",
+        "max": "10",
+        "alignment": "red",
+        "typecode": "02080001"
+      },
+      {
+        "default": "1",
+        "min": "1",
+        "max": "10",
+        "alignment": "red",
+        "typecode": "02090001"
+      }
+    ],
+    "type": "Depot_Land_F",
+    "priority": "20"
+  },
+  {
+    "typecode": "F-0201",
+    "compose": [
+      {
+        "default": "2",
+        "min": "1",
+        "max": "1",
+        "alignment": "red",
+        "typecode": "02010001"
+      }
+    ],
+    "type": "Destroyer_F",
+    "priority": "16"
+  },
+  {
+    "typecode": "F-0101-0107",
+    "compose": [
+      {
+        "default": "16",
+        "min": "1",
+        "max": "16",
+        "alignment": "red",
+        "typecode": "01010003"
+      },
+      {
+        "default": "8",
+        "min": "1",
+        "max": "8",
+        "alignment": "red",
+        "typecode": "01010004"
+      },
+      {
+        "default": "4",
+        "min": "1",
+        "max": "4",
+        "alignment": "red",
+        "typecode": "01070002"
+      }
+    ],
+    "type": "Fighter_EWFighter_F",
+    "priority": "21"
+  },
+  {
+    "typecode": "F-0203",
+    "compose": [
+      {
+        "default": "4",
+        "min": "1",
+        "max": "5",
+        "alignment": "red",
+        "typecode": "02030005"
+      },
+      {
+        "default": "1",
+        "min": "1",
+        "max": "1",
+        "alignment": "red",
+        "typecode": "02030001"
+      },
+      {
+        "default": "1",
+        "min": "1",
+        "max": "5",
+        "alignment": "red",
+        "typecode": "02030004"
+      }
+    ],
+    "type": "Submarine_F",
+    "priority": "17"
+  },
+  {
+    "typecode": "F-0117",
+    "compose": [
+      {
+        "default": "1",
+        "min": "1",
+        "max": "2",
+        "alignment": "red",
+        "typecode": "01170001"
+      }
+    ],
+    "type": "AEW_F",
+    "priority": "3"
+  },
+  {
+    "typecode": "F-0101-0117",
+    "compose": [
+      {
+        "default": "1",
+        "min": "1",
+        "max": "1",
+        "alignment": "red",
+        "typecode": "01170004"
+      }
+    ],
+    "type": "Fighter_AEW_F",
+    "priority": "6"
+  },
+  {
+    "typecode": "F-0101",
+    "compose": [
+      {
+        "default": "2",
+        "min": "1",
+        "max": "16",
+        "alignment": "red",
+        "typecode": "01010003"
+      }
+    ],
+    "type": "Fighter_F",
+    "priority": "2"
+  },
+  {
+    "typecode": "F-0107",
+    "compose": [
+      {
+        "default": "4",
+        "min": "1",
+        "max": "6",
+        "alignment": "red",
+        "typecode": "01070002"
+      }
+    ],
+    "type": "EWFighter_F",
+    "priority": "18"
+  },
+  {
+    "typecode": "F-0201-0403",
+    "compose": [
+      {
+        "default": "2",
+        "min": "1",
+        "max": "4",
+        "alignment": "red",
+        "typecode": "02010001"
+      },
+      {
+        "default": "2",
+        "min": "1",
+        "max": "1",
+        "alignment": "red",
+        "typecode": "04030001"
+      }
+    ],
+    "type": "Destroyer_SAM_F",
+    "priority": "19"
+  },
+  {
+    "typecode": "F-0202",
+    "compose": [
+      {
+        "default": "1",
+        "min": "2",
+        "max": "2",
+        "alignment": "red",
+        "typecode": "02020001"
+      }
+    ],
+    "type": "Frigate_F",
+    "priority": "4"
+  },
+  {
+    "typecode": "F-0201-0202",
+    "compose": [
+      {
+        "default": "2",
+        "min": "1",
+        "max": "10",
+        "alignment": "red",
+        "typecode": "02010001"
+      },
+      {
+        "default": "2",
+        "min": "1",
+        "max": "10",
+        "alignment": "red",
+        "typecode": "02020001"
+      },
+      {
+        "default": "2",
+        "min": "1",
+        "max": "10",
+        "alignment": "red",
+        "typecode": "02010003"
+      }
+    ],
+    "type": "Destroyer_Frigate_F",
+    "priority": "15"
+  },
+  {
+    "typecode": "F-0205",
+    "compose": [
+      {
+        "default": "4",
+        "min": "1",
+        "max": "10",
+        "alignment": "red",
+        "typecode": "02050001"
+      }
+    ],
+    "type": "Missile_Clippers_F",
+    "priority": "13"
+  },
+  {
+    "typecode": "F-0204",
+    "compose": [
+      {
+        "default": "2",
+        "min": "1",
+        "max": "10",
+        "alignment": "red",
+        "typecode": "02040001"
+      }
+    ],
+    "type": "Patrol_F",
+    "priority": "12"
+  },
+  {
+    "typecode": "F-0207",
+    "compose": [
+      {
+        "default": "2",
+        "min": "1",
+        "max": "10",
+        "alignment": "red",
+        "typecode": "02070001"
+      }
+    ],
+    "type": "Monitor_Ship_F",
+    "priority": "14"
+  },
+  {
+    "typecode": "F-0116",
+    "compose": [
+      {
+        "default": "2",
+        "min": "1",
+        "max": "5",
+        "alignment": "red",
+        "typecode": "01160001"
+      }
+    ],
+    "type": "Anti_Submarine_F",
+    "priority": "8"
+  },
+  {
+    "priority": "5",
+    "type": "Destroyer_F",
+    "typecode": "F-0201",
+    "compose": [
+      {
+        "default": "2",
+        "min": "2",
+        "max": "2",
+        "typecode": "02010001"
+      }
+    ]
+  }
+]
