@@ -1,6 +1,6 @@
 [flake8]
 ignore = E731, E741, W504, W503, E126,E125, E402
-max-line-length = 200
+max-line-length = 160
 show-source = False
 application-import-names = marltoolkit
 exclude =
