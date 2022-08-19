@@ -1,1 +1,0 @@
-protoc -I=C:\Users\lenovo\Desktop\spirit_10.2\environment\comm_sim --python_out=C:\Users\lenovo\Desktop\spirit_10.2\environment\comm_sim C:\Users\lenovo\Desktop\spirit_10.2\environment\comm_sim\DB_Connector\DB_Connector.proto

@@ -1,7 +1,4 @@
-# multi-agent-rainforcement-learning
-multi-agent-rainforcement-learning
-
-<h1 align="center"> MARLToolkit: The  Multi Agent Rainforcement Learning Toolkit</h1>
+<h2 align="center"> MARLToolkit: The  Multi Agent Rainforcement Learning Toolkit</h2>
 
 **Multi-Agent RLlib (MARLlib)** is a *Multi-Agent Reinforcement Learning benchmark* based on [**Ray**](https://github.com/ray-project/ray) and one of its toolkits [**RLlib**](https://github.com/ray-project/ray/tree/master/rllib).
 It provides MARL research community a unified platform for developing and evaluating the new ideas in various multi-agent environments.
