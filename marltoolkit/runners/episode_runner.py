@@ -21,11 +21,12 @@ def run_train_episode(env, agent, rpm, config: dict = None):
     while not terminated:
         available_actions = env.get_available_actions()
         actions = agent.sample(obs, available_actions)
+        actions_onehot = env._get_actions_one_hot(actions)
         next_state, next_obs, reward, terminated = env.step(actions)
         episode_reward += reward
         episode_step += 1
-        episode_experience.add(state, obs, actions, available_actions, reward,
-                               terminated, 0)
+        episode_experience.add(state, obs, actions, actions_onehot,
+                               available_actions, reward, terminated, 0)
         state = next_state
         obs = next_obs
 
