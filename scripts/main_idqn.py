@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append('../')
 from configs.arguments import get_common_args
-from configs.qmix_config import QMixConfig
+from configs.idqn_config import Config
 from marltoolkit.agents import IDQNAgent
 from marltoolkit.envs.env_wrapper import SC2EnvWrapper
 from marltoolkit.modules.agents import RNNModel
@@ -26,7 +26,7 @@ def main():
     device = torch.device(
         'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    config = deepcopy(QMixConfig)
+    config = deepcopy(Config)
     common_args = get_common_args()
     common_dict = vars(common_args)
     config.update(common_dict)
