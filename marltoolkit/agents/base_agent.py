@@ -1,14 +1,11 @@
 import os
-import sys
 from copy import deepcopy
 
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.distributions import Categorical
-
 from rltoolkit.models.utils import check_model_method, hard_target_update
-from rltoolkit.utils.scheduler import LinearDecayScheduler
+from torch.distributions import Categorical
 
 
 class BaseAgent(object):
@@ -72,7 +69,6 @@ class BaseAgent(object):
         self.target_agent_model.to(device)
         self.mixer_model.to(device)
         self.target_mixer_model.to(device)
-
 
     def reset_agent(self, batch_size=1):
         self._init_hidden_states(batch_size)

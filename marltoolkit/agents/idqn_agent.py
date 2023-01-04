@@ -4,13 +4,14 @@ from copy import deepcopy
 import numpy as np
 import torch
 import torch.nn as nn
-from rltoolkit.models.utils import check_model_method, hard_target_update
-from rltoolkit.utils.scheduler import LinearDecayScheduler, MultiStepScheduler
 from torch.distributions import Categorical
 
+from rltoolkit.models.utils import check_model_method, hard_target_update
+from rltoolkit.utils.scheduler import LinearDecayScheduler, MultiStepScheduler
 
-class QMixAgent(object):
-    """ QMIX algorithm
+
+class IDQNAgent(object):
+    """ IDQN algorithm
     Args:
         agent_model (rltoolkit.Model): agents' local q network for decision making.
         mixer_model (rltoolkit.Model): A mixing network which takes local q values as input
@@ -41,10 +42,6 @@ class QMixAgent(object):
 
         check_model_method(agent_model, 'init_hidden', self.__class__.__name__)
         check_model_method(agent_model, 'forward', self.__class__.__name__)
-        check_model_method(mixer_model, 'forward', self.__class__.__name__)
-        assert hasattr(mixer_model, 'n_agents') and not callable(
-            getattr(mixer_model, 'n_agents',
-                    None)), 'mixer_model needs to have attribute n_agents'
         assert isinstance(gamma, float)
         assert isinstance(learning_rate, float)
 
@@ -63,16 +60,20 @@ class QMixAgent(object):
 
         self.device = device
         self.agent_model = agent_model
-        self.mixer_model = mixer_model
         self.target_agent_model = deepcopy(self.agent_model)
-        self.target_mixer_model = deepcopy(self.mixer_model)
         self.agent_model.to(device)
         self.target_agent_model.to(device)
-        self.mixer_model.to(device)
-        self.target_mixer_model.to(device)
 
         self.params = list(self.agent_model.parameters())
-        self.params += list(self.mixer_model.parameters())
+
+        self.mixer_model = None
+        if mixer_model is not None:
+            self.mixer_model = mixer_model
+            self.mixer_model.to(device)
+            self.target_mixer_model = deepcopy(self.mixer_model)
+            self.target_mixer_model.to(device)
+            self.params += list(self.mixer_model.parameters())
+
         self.optimizer = torch.optim.RMSprop(
             params=self.params,
             lr=self.learning_rate,
@@ -145,7 +146,8 @@ class QMixAgent(object):
 
     def update_target(self):
         hard_target_update(self.agent_model, self.target_agent_model)
-        hard_target_update(self.mixer_model, self.target_mixer_model)
+        if self.mixer_model is not None:
+            hard_target_update(self.mixer_model, self.target_mixer_model)
 
     def learn(self, state_batch, actions_batch, reward_batch, terminated_batch,
               obs_batch, available_actions_batch, filled_batch, **kwargs):
@@ -239,11 +241,19 @@ class QMixAgent(object):
             target_global_max_qs = self.target_mixer_model(
                 target_local_max_qs, state_batch[:, 1:, :])
 
+        if self.mixer_model is not None:
+            target_max_qvals = target_local_max_qs
+            chosen_action_qvals = chosen_action_local_qs
+        else:
+            target_max_qvals = target_global_max_qs
+            chosen_action_qvals = chosen_action_global_qs
+
         # Calculate 1-step Q-Learning targets
         target = reward_batch + self.gamma * (
-            1 - terminated_batch) * target_global_max_qs
+            1 - terminated_batch) * target_max_qvals
         #  Td-error
-        td_error = target.detach() - chosen_action_global_qs
+        td_error = target.detach() - chosen_action_qvals
+
         #  0-out the targets that came from padded data
         masked_td_error = td_error * mask
         mean_td_error = masked_td_error.sum() / mask.sum()
@@ -261,31 +271,3 @@ class QMixAgent(object):
             param_group['lr'] = self.learning_rate
 
         return loss.item(), mean_td_error.item()
-
-    def save(self,
-             save_dir: str = None,
-             agent_model_name: str = 'agent_model.th',
-             mixer_model_name: str = 'mixer_model.th',
-             opt_name: str = 'optimizer.th'):
-        if not os.path.exists(save_dir):
-            os.mkdir(save_dir)
-        agent_model_path = os.path.join(save_dir, agent_model_name)
-        mixer_model_path = os.path.join(save_dir, mixer_model_name)
-        optimizer_path = os.path.join(save_dir, opt_name)
-        torch.save(self.agent_model.state_dict(), agent_model_path)
-        torch.save(self.mixer_model.state_dict(), mixer_model_path)
-        torch.save(self.optimizer.state_dict(), optimizer_path)
-        print('save model successfully!')
-
-    def restore(self,
-                save_dir: str = None,
-                agent_model_name: str = 'agent_model.th',
-                mixer_model_name: str = 'mixer_model.th',
-                opt_name: str = 'optimizer.th'):
-        agent_model_path = os.path.join(save_dir, agent_model_name)
-        mixer_model_path = os.path.join(save_dir, mixer_model_name)
-        optimizer_path = os.path.join(save_dir, opt_name)
-        self.agent_model.load_state_dict(torch.load(agent_model_path))
-        self.mixer_model.load_state_dict(torch.load(mixer_model_path))
-        self.optimizer.load_state_dict(torch.load(optimizer_path))
-        print('restore model successfully!')
