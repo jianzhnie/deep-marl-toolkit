@@ -1,13 +1,11 @@
-import os
 from copy import deepcopy
 
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.distributions import Categorical
-
 from rltoolkit.models.utils import check_model_method, hard_target_update
 from rltoolkit.utils.scheduler import LinearDecayScheduler, MultiStepScheduler
+from torch.distributions import Categorical
 
 
 class IDQNAgent(object):
@@ -241,7 +239,7 @@ class IDQNAgent(object):
             target_global_max_qs = self.target_mixer_model(
                 target_local_max_qs, state_batch[:, 1:, :])
 
-        if self.mixer_model is not None:
+        if self.mixer_model is None:
             target_max_qvals = target_local_max_qs
             chosen_action_qvals = chosen_action_local_qs
         else:
