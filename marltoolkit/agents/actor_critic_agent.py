@@ -3,13 +3,14 @@ from copy import deepcopy
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.distributions import Categorical
-
 from rltoolkit.models.utils import check_model_method, hard_target_update
 from rltoolkit.utils.scheduler import LinearDecayScheduler, MultiStepScheduler
+from torch.distributions import Categorical
+
+from .base_agent import BaseAgent
 
 
-class ACAgent(object):
+class ACAgent(BaseAgent):
     """ ACAgent algorithm
     Args:
         agent_model (rltoolkit.Model): agents' local q network for decision making.
@@ -231,7 +232,7 @@ class ACAgent(object):
                                        self.args.grad_norm_clip)
         self.agent_optimiser.step()
 
-        return  pg_loss.item(), critic_loss.item(), mean_td_error.item()
+        return pg_loss.item(), critic_loss.item(), mean_td_error.item()
 
     def train_critic_sequential(self, obs_batch, rewards, mask):
         with torch.no_grad():
