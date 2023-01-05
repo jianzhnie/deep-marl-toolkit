@@ -8,8 +8,10 @@ from rltoolkit.models.utils import check_model_method, hard_target_update
 from rltoolkit.utils.scheduler import LinearDecayScheduler, MultiStepScheduler
 from torch.distributions import Categorical
 
+from .base_agent import BaseAgent
 
-class QMixAgent(object):
+
+class QMixAgent(BaseAgent):
     """ QMIX algorithm
     Args:
         agent_model (rltoolkit.Model): agents' local q network for decision making.
