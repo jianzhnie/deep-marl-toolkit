@@ -34,9 +34,11 @@ if __name__ == '__main__':
 
     setup(
         name='marltoolkit',
+        version=version,
         author='Jianzh Nie',
         author_email='jianzhnie@gmail.com',
-        description='MarlToolkit is a flexible Multi-Agent reinforcement learning framework.',
+        description=
+        'MarlToolkit is a flexible Multi-Agent reinforcement learning framework.',
         long_description=long_description,
         long_description_content_type='text/markdown',
         packages=find_packages(
