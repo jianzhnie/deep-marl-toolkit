@@ -43,10 +43,11 @@ class QMixAgent(BaseAgent):
 
         check_model_method(agent_model, 'init_hidden', self.__class__.__name__)
         check_model_method(agent_model, 'forward', self.__class__.__name__)
-        check_model_method(mixer_model, 'forward', self.__class__.__name__)
-        assert hasattr(mixer_model, 'n_agents') and not callable(
-            getattr(mixer_model, 'n_agents',
-                    None)), 'mixer_model needs to have attribute n_agents'
+        if mixer_model is not None:
+            check_model_method(mixer_model, 'forward', self.__class__.__name__)
+            assert hasattr(mixer_model, 'n_agents') and not callable(
+                getattr(mixer_model, 'n_agents',
+                        None)), 'mixer_model needs to have attribute n_agents'
         assert isinstance(gamma, float)
         assert isinstance(learning_rate, float)
 
@@ -65,16 +66,20 @@ class QMixAgent(BaseAgent):
 
         self.device = device
         self.agent_model = agent_model
-        self.mixer_model = mixer_model
         self.target_agent_model = deepcopy(self.agent_model)
-        self.target_mixer_model = deepcopy(self.mixer_model)
         self.agent_model.to(device)
         self.target_agent_model.to(device)
-        self.mixer_model.to(device)
-        self.target_mixer_model.to(device)
 
         self.params = list(self.agent_model.parameters())
-        self.params += list(self.mixer_model.parameters())
+
+        self.mixer_model = None
+        if mixer_model is not None:
+            self.mixer_model = mixer_model
+            self.target_mixer_model = deepcopy(self.mixer_model)
+            self.mixer_model.to(device)
+            self.target_mixer_model.to(device)
+            self.params += list(self.mixer_model.parameters())
+
         self.optimizer = torch.optim.RMSprop(
             params=self.params,
             lr=self.learning_rate,
@@ -147,7 +152,8 @@ class QMixAgent(BaseAgent):
 
     def update_target(self):
         hard_target_update(self.agent_model, self.target_agent_model)
-        hard_target_update(self.mixer_model, self.target_mixer_model)
+        if self.mixer_model is not None:
+            hard_target_update(self.mixer_model, self.target_mixer_model)
 
     def learn(self, state_batch, actions_batch, reward_batch, terminated_batch,
               obs_batch, available_actions_batch, filled_batch, **kwargs):
@@ -241,11 +247,19 @@ class QMixAgent(BaseAgent):
             target_global_max_qs = self.target_mixer_model(
                 target_local_max_qs, state_batch[:, 1:, :])
 
+        if self.mixer_model is None:
+            target_max_qvals = target_local_max_qs
+            chosen_action_qvals = chosen_action_local_qs
+        else:
+            target_max_qvals = target_global_max_qs
+            chosen_action_qvals = chosen_action_global_qs
+
         # Calculate 1-step Q-Learning targets
         target = reward_batch + self.gamma * (
-            1 - terminated_batch) * target_global_max_qs
+            1 - terminated_batch) * target_max_qvals
         #  Td-error
-        td_error = target.detach() - chosen_action_global_qs
+        td_error = target.detach() - chosen_action_qvals
+
         #  0-out the targets that came from padded data
         masked_td_error = td_error * mask
         mean_td_error = masked_td_error.sum() / mask.sum()
