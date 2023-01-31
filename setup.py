@@ -30,14 +30,14 @@ if __name__ == '__main__':
         long_description = fh.read()
 
     setup(
-        name='rltoolkit',
+        name='marltoolkit',
         author='Jianzh Nie',
         author_email='jianzhnie@gmail.com',
-        description='RLToolkit is a flexible reinforcement learning framework.',
+        description='MarlToolkit is a flexible Multi-Agent reinforcement learning framework.',
         long_description=long_description,
         long_description_content_type='text/markdown',
         packages=find_packages(
-            exclude=['config', 'docs', 'examples', 'scripts', 'tools'],
+            exclude=['configs', 'docs', 'examples', 'scripts', 'tools'],
             include=['marltoolkit']),
         install_requires=install_reqs,
         include_package_data=True,

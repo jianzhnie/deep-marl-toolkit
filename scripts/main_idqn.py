@@ -17,7 +17,7 @@ from configs.arguments import get_common_args
 from configs.idqn_config import Config
 from marltoolkit.agents import IDQNAgent
 from marltoolkit.envs.env_wrapper import SC2EnvWrapper
-from marltoolkit.modules.agents import RNNModel
+from marltoolkit.modules.actors import RNNModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
                                                 run_train_episode)
 
