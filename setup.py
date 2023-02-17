@@ -32,13 +32,13 @@ if __name__ == '__main__':
     with open('README.md', encoding='utf-8') as fh:
         long_description = fh.read()
 
+    dec = 'MarlToolkit is a flexible Multi-Agent reinforcement learning framework.'
     setup(
         name='marltoolkit',
         version=version,
         author='Jianzh Nie',
         author_email='jianzhnie@gmail.com',
-        description=
-        'MarlToolkit is a flexible Multi-Agent reinforcement learning framework.',
+        description=dec,
         long_description=long_description,
         long_description_content_type='text/markdown',
         packages=find_packages(
