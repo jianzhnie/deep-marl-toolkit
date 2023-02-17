@@ -11,15 +11,13 @@ There are four core features of **MARLToolkit**.
 
 ## Overview
 
-We collected most of the existing multi-agent environment and multi-agent reinforcement learning algorithms and unified them under one framework based on [**Ray**](https://github.com/ray-project/ray) 's [**RLlib**](https://github.com/ray-project/ray/tree/master/rllib) to boost the MARL research.
+We collected most of the existing multi-agent environment and multi-agent reinforcement learning algorithms and unified them under one framework based on \[**Pytorch**\] to boost the MARL research.
 
 The MARL baselines include **independence learning (IQL, A2C, DDPG, TRPO, PPO)**, **centralized critic learning (COMA, MADDPG, MAPPO, HATRPO)**, and **value decomposition (QMIX, VDN, FACMAC, VDA2C)** are all implemented.
 
 Popular environments like **SMAC, MaMujoco, and Google Research Football** are provided with a unified interface.
 
 The algorithm code and environment code are fully separated. Changing the environment needs no modification on the algorithm side and vice versa.
-
-Here we provide a table for comparison of MARLlib and before benchmarks.
 
 |                              Benchmark                               |                                                                    Github Stars                                                                     | Learning Mode | Available Env | Algorithm Type | Algorithm Number | Continues Control  | Asynchronous Interact | Distributed Training |                                       Framework                                        |                                                     Last Update                                                     |
 | :------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------------------------------------------------------------: | :-----------: | :-----------: | :------------: | :--------------: | :----------------: | :-------------------: | :------------------: | :------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------------: |
@@ -37,12 +35,6 @@ CP, CL, CM, and MI represent cooperative, collaborative, competitive, and mixed 
 IL, VD, and CC represent independent learning, value decomposition, and centralized critic categorization. SP represents self-play.
 Comm represents communication-based learning.
 Asterisk denotes that the benchmark uses its framework.
-
-The tutorial of RLlib can be found at this [link](https://docs.ray.io/en/releases-1.8.0/).
-Fast examples can be found at this [link](https://docs.ray.io/en/releases-1.8.0/rllib-examples.html).
-These will help you quickly dive into RLlib.
-
-We hope MARLlib can benefit everyone interested in RL/MARL.
 
 ## Environment
 
@@ -136,4 +128,4 @@ Here is a chart describing the characteristics of each algorithm:
 | GRF             | Y   | Y   | Y   | N    | Y    | Y   | Y    | N      | Y    | Y      | Y     | Y      | Y     | Y   | Y    | Y      | Y    | Y     |
 | Hanabi          | Y   | Y   | Y   | N    | Y    | Y   | Y    | N      | Y    | Y      | Y     | Y      | Y     | N   | N    | N      | N    | N     |
 
-You can find a comprehensive list of existing MARL algorithms in different environments  [here](https://github.com/Replicable-MARL/MARLlib/tree/main/envs).
+You can find a comprehensive list of existing MARL algorithms in different environments  [here](docs/awesome_marl.md).
