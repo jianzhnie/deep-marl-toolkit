@@ -26,20 +26,23 @@ if __name__ == '__main__':
             if not r.startswith('#') and not r.startswith('git+')
         ]
 
+    with open('marltoolkit/__version__.py') as fh:
+        version = fh.readlines()[-1].split()[-1].strip("\"'")
+
     with open('README.md', encoding='utf-8') as fh:
         long_description = fh.read()
 
     dec = 'MarlToolkit is a flexible Multi-Agent reinforcement learning framework.'
     setup(
         name='marltoolkit',
+        version=version,
         author='Jianzh Nie',
         author_email='jianzhnie@gmail.com',
         description=dec,
         long_description=long_description,
         long_description_content_type='text/markdown',
         packages=find_packages(
-            exclude=['configs', 'docs', 'examples', 'scripts', 'tools'],
-            include=['marltoolkit']),
+            exclude=['configs', 'docs', 'examples', 'scripts', 'tools']),
         install_requires=install_reqs,
         include_package_data=True,
         license='Apache License',

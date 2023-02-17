@@ -27,12 +27,6 @@ repos:
   - repo: https://github.com/executablebooks/mdformat
     rev: 0.7.9
     hooks:
-      - id: mdformat
-        args: ["--number"]
-        additional_dependencies:
-          - mdformat-openmmlab
-          - mdformat_frontmatter
-          - linkify-it-py
   - repo: https://github.com/myint/docformatter
     rev: v1.3.1
     hooks:
