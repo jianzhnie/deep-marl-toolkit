@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append('../')
 from configs.arguments import get_common_args
-from configs.idqn_config import Config
+from configs.idqn_config import IDQNConfig
 from marltoolkit.agents import IDQNAgent
 from marltoolkit.envs.env_wrapper import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
@@ -26,7 +26,7 @@ def main():
     device = torch.device(
         'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    config = deepcopy(Config)
+    config = deepcopy(IDQNConfig)
     common_args = get_common_args()
     common_dict = vars(common_args)
     config.update(common_dict)
@@ -85,7 +85,7 @@ def main():
         n_actions=config['n_actions'],
         rnn_hidden_dim=config['rnn_hidden_dim'])
 
-    qmix_agent = IDQNAgent(
+    idqn_agent = IDQNAgent(
         agent_model=agent_model,
         mixer_model=None,
         n_agents=config['n_agents'],
@@ -103,7 +103,7 @@ def main():
 
     progress_bar = mmcv.ProgressBar(config['memory_warmup_size'])
     while rpm.size() < config['memory_warmup_size']:
-        run_train_episode(env, qmix_agent, rpm, config)
+        run_train_episode(env, idqn_agent, rpm, config)
         progress_bar.update()
 
     steps_cnt = 0
@@ -111,15 +111,15 @@ def main():
     progress_bar = mmcv.ProgressBar(config['total_steps'])
     while steps_cnt < config['total_steps']:
         episode_reward, episode_step, is_win, mean_loss, mean_td_error = run_train_episode(
-            env, qmix_agent, rpm, config)
+            env, idqn_agent, rpm, config)
         # update episodes and steps
         episode_cnt += 1
         steps_cnt += episode_step
 
         # learning rate decay
-        qmix_agent.learning_rate = max(
-            qmix_agent.lr_scheduler.step(episode_step),
-            qmix_agent.min_learning_rate)
+        idqn_agent.learning_rate = max(
+            idqn_agent.lr_scheduler.step(episode_step),
+            idqn_agent.min_learning_rate)
 
         train_results = {
             'env_step': episode_step,
@@ -127,10 +127,10 @@ def main():
             'win_rate': is_win,
             'mean_loss': mean_loss,
             'mean_td_error': mean_td_error,
-            'exploration': qmix_agent.exploration,
-            'learning_rate': qmix_agent.learning_rate,
+            'exploration': idqn_agent.exploration,
+            'learning_rate': idqn_agent.learning_rate,
             'replay_buffer_size': rpm.size(),
-            'target_update_count': qmix_agent.target_update_count,
+            'target_update_count': idqn_agent.target_update_count,
         }
         if episode_cnt % config['train_log_interval'] == 0:
             text_logger.info(
@@ -140,7 +140,7 @@ def main():
 
         if episode_cnt % config['test_log_interval'] == 0:
             eval_rewards, eval_steps, eval_win_rate = run_evaluate_episode(
-                env, qmix_agent, num_eval_episodes=5)
+                env, idqn_agent, num_eval_episodes=5)
             text_logger.info(
                 '[Eval], episode: {}, eval_win_rate: {:.2f}, eval_rewards: {:.2f}'
                 .format(episode_cnt, eval_win_rate, eval_rewards))

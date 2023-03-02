@@ -1,8 +1,8 @@
 import numpy as np
-from rltoolkit.data.buffer.ma_replaybuffer import EpisodeData
+from rltoolkit.data.buffer.ma_replaybuffer import EpisodeData, ReplayBuffer
 
 
-def run_train_episode(env, agent, rpm, config: dict = None):
+def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):
 
     episode_limit = config['episode_limit']
     agent.reset_agent()

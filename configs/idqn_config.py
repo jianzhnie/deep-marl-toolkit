@@ -1,4 +1,4 @@
-Config = {
+IDQNConfig = {
     'project': 'StarCraft-II',
     'scenario': '3s_vs_3z',
     'replay_buffer_size': 5000,
