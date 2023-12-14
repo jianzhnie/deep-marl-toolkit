@@ -126,7 +126,7 @@ class ReplayBuffer(object):
                  num_agents: int,
                  num_actions: int,
                  batch_size: int,
-                 dtype: torch.dtype = torch.float32,
+                 dtype: torch.dtype = torch.float16,
                  device: str = 'cpu'):
 
         self.obs_buf = np.zeros(
