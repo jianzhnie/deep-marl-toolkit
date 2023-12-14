@@ -1,5 +1,6 @@
 import numpy as np
-from rltoolkit.data.buffer.ma_replaybuffer import EpisodeData, ReplayBuffer
+
+from marltoolkit.data.ma_replaybuffer import EpisodeData, ReplayBuffer
 
 
 def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):

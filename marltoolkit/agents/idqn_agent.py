@@ -3,9 +3,10 @@ from copy import deepcopy
 import numpy as np
 import torch
 import torch.nn as nn
-from rltoolkit.models.utils import check_model_method, hard_target_update
-from rltoolkit.utils.scheduler import LinearDecayScheduler, MultiStepScheduler
 from torch.distributions import Categorical
+
+from marltoolkit.utils import (LinearDecayScheduler, MultiStepScheduler,
+                               check_model_method, hard_target_update)
 
 from .qmix_agent import QMixAgent
 
@@ -13,8 +14,8 @@ from .qmix_agent import QMixAgent
 class IDQNAgent(QMixAgent):
     """ IDQN algorithm
     Args:
-        agent_model (rltoolkit.Model): agents' local q network for decision making.
-        mixer_model (rltoolkit.Model): A mixing network which takes local q values as input
+        agent_model (nn.Model): agents' local q network for decision making.
+        mixer_model (nn.Model): A mixing network which takes local q values as input
             to construct a global Q network.
         double_q (bool): Double-DQN.
         gamma (float): discounted factor for reward computation.
