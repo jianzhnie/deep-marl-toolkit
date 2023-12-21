@@ -10,12 +10,12 @@ from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append('../')
 from configs.arguments import get_common_args
-from configs.qmix_config import QMixConfig
-from marltoolkit.agents.qmix_agent import QMixAgent
+from configs.qtran_config import QTranConfig
+from marltoolkit.agents.qtran_agent import QTranAgent
 from marltoolkit.data.ma_replaybuffer import ReplayBuffer
 from marltoolkit.envs.env_wrapper import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
-from marltoolkit.modules.mixers import QMixerModel
+from marltoolkit.modules.mixers.qtran_mixer import QTransModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
                                                 run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
@@ -26,7 +26,7 @@ def main():
     device = torch.device(
         'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    config = deepcopy(QMixConfig)
+    config = deepcopy(QTranConfig)
     common_args = get_common_args()
     common_dict = vars(common_args)
     config.update(common_dict)
@@ -50,9 +50,7 @@ def main():
     text_log_path = os.path.join(args.log_dir, args.project, args.scenario,
                                  args.algo)
     tensorboard_log_path = get_outdir(text_log_path, 'log_dir')
-    log_file = os.path.join(
-        text_log_path,
-        log_name.replace(os.path.sep, '_') + f'{timestamp}.log')
+    log_file = os.path.join(text_log_path, f'{timestamp}.log')
     text_logger = get_root_logger(log_file=log_file, log_level='INFO')
 
     if args.logger == 'wandb':
@@ -86,18 +84,18 @@ def main():
         input_shape=config['obs_shape'],
         n_actions=config['n_actions'],
         rnn_hidden_dim=config['rnn_hidden_dim'])
-
-    mixer_model = QMixerModel(
+    mixer_model = QTransModel(
         n_agents=config['n_agents'],
-        state_shape=config['state_shape'],
-        mixing_embed_dim=config['mixing_embed_dim'],
-        hypernet_layers=config['hypernet_layers'],
-        hypernet_embed_dim=config['hypernet_embed_dim'])
+        n_actions=config['n_actions'],
+        state_dim=config['state_shape'],
+        rnn_hidden_dim=config['rnn_hidden_dim'],
+        mixing_embed_dim=config['mixing_embed_dim'])
 
-    qmix_agent = QMixAgent(
+    qmix_agent = QTranAgent(
         agent_model=agent_model,
         mixer_model=mixer_model,
         n_agents=config['n_agents'],
+        n_actions=config['n_actions'],
         double_q=config['double_q'],
         total_steps=config['total_steps'],
         gamma=config['gamma'],
@@ -108,6 +106,8 @@ def main():
         update_target_interval=config['update_target_interval'],
         update_learner_freq=config['update_learner_freq'],
         clip_grad_norm=config['clip_grad_norm'],
+        opt_loss_coef=config['opt_loss_coef'],
+        nopt_min_loss_coef=config['nopt_min_loss_coef'],
         device=device)
 
     progress_bar = ProgressBar(config['memory_warmup_size'])
@@ -119,7 +119,7 @@ def main():
     episode_cnt = 0
     progress_bar = ProgressBar(config['total_steps'])
     while steps_cnt < config['total_steps']:
-        episode_reward, episode_step, is_win, mean_loss, mean_td_error = run_train_episode(
+        episode_reward, episode_step, is_win, mean_loss, mean_td_loss, mean_opt_loss, mean_nopt_loss = run_train_episode(
             env, qmix_agent, rpm, config)
         # update episodes and steps
         episode_cnt += 1
@@ -135,7 +135,7 @@ def main():
             'rewards': episode_reward,
             'win_rate': is_win,
             'mean_loss': mean_loss,
-            'mean_td_error': mean_td_error,
+            'mean_td_loss': mean_td_loss,
             'exploration': qmix_agent.exploration,
             'learning_rate': qmix_agent.learning_rate,
             'replay_buffer_size': rpm.size(),

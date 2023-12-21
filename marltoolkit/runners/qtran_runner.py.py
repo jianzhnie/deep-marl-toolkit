@@ -41,18 +41,24 @@ def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):
     is_win = env.win_counted
 
     mean_loss = []
-    mean_td_error = []
+    mean_td_loss = []
+    mean_opt_loss = []
+    mean_nopt_loss = []
     if rpm.size() > config['memory_warmup_size']:
         for _ in range(config['update_learner_freq']):
             batch = rpm.sample_batch(config['batch_size'])
-            loss, td_error = agent.learn(**batch)
+            loss, td_loss, opt_loss, nopt_loss = agent.learn(**batch)
             mean_loss.append(loss)
-            mean_td_error.append(td_error)
+            mean_td_loss.append(td_loss)
+            mean_opt_loss.append(opt_loss)
+            mean_nopt_loss.append(nopt_loss)
 
     mean_loss = np.mean(mean_loss) if mean_loss else None
-    mean_td_error = np.mean(mean_td_error) if mean_td_error else None
+    mean_td_loss = np.mean(mean_td_loss) if mean_td_loss else None
+    mean_opt_loss = np.mean(mean_opt_loss) if mean_opt_loss else None
+    mean_nopt_loss = np.mean(mean_nopt_loss) if mean_nopt_loss else None
 
-    return episode_reward, episode_step, is_win, mean_loss, mean_td_error
+    return episode_reward, episode_step, is_win, mean_loss, mean_td_loss, mean_opt_loss, mean_nopt_loss
 
 
 def run_evaluate_episode(env, agent, num_eval_episodes=5):
