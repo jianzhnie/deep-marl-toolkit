@@ -4,11 +4,7 @@ import sys
 import time
 from copy import deepcopy
 
-import mmcv
 import torch
-from rltoolkit.data.buffer.ma_replaybuffer import ReplayBuffer
-from rltoolkit.utils import TensorboardLogger, WandbLogger
-from rltoolkit.utils.logger.logs import get_outdir, get_root_logger
 from smac.env import StarCraft2Env
 from torch.utils.tensorboard import SummaryWriter
 
@@ -16,11 +12,14 @@ sys.path.append('../')
 from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.vdn_agent import VDNAgent
+from marltoolkit.data.ma_replaybuffer import ReplayBuffer
 from marltoolkit.envs.env_wrapper import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
 from marltoolkit.modules.mixers import VDNMixer
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
                                                 run_train_episode)
+from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
+                               get_outdir, get_root_logger)
 
 
 def main():
@@ -51,7 +50,9 @@ def main():
     text_log_path = os.path.join(args.log_dir, args.project, args.scenario,
                                  args.algo)
     tensorboard_log_path = get_outdir(text_log_path, 'log_dir')
-    log_file = os.path.join(text_log_path, f'{timestamp}.log')
+    log_file = os.path.join(
+        text_log_path,
+        log_name.replace(os.path.sep, '_') + f'{timestamp}.log')
     text_logger = get_root_logger(log_file=log_file, log_level='INFO')
 
     if args.logger == 'wandb':
@@ -104,14 +105,14 @@ def main():
         clip_grad_norm=config['clip_grad_norm'],
         device=device)
 
-    progress_bar = mmcv.ProgressBar(config['memory_warmup_size'])
+    progress_bar = ProgressBar(config['memory_warmup_size'])
     while rpm.size() < config['memory_warmup_size']:
         run_train_episode(env, qmix_agent, rpm, config)
         progress_bar.update()
 
     steps_cnt = 0
     episode_cnt = 0
-    progress_bar = mmcv.ProgressBar(config['total_steps'])
+    progress_bar = ProgressBar(config['total_steps'])
     while steps_cnt < config['total_steps']:
         episode_reward, episode_step, is_win, mean_loss, mean_td_error = run_train_episode(
             env, qmix_agent, rpm, config)
