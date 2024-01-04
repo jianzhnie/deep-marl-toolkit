@@ -28,7 +28,8 @@ REWARD_MAP = {
 def env(render_mode=None):
     """The env function often wraps the environment in wrappers by default.
 
-    You can find full documentation for these methods elsewhere in the developer documentation.
+    You can find full documentation for these methods elsewhere in the
+    developer documentation.
     """
     internal_render_mode = render_mode if render_mode != 'ansi' else 'human'
     env = raw_env(render_mode=internal_render_mode)
@@ -46,8 +47,10 @@ def env(render_mode=None):
 class raw_env(AECEnv):
     """The metadata holds environment constants.
 
-    From gymnasium, we inherit the "render_modes", metadata which specifies which modes can be put into the render() method. At least human mode should be
-    supported. The "name" metadata allows the environment to be pretty printed.
+    From gymnasium, we inherit the "render_modes", metadata which specifies
+    which modes can be put into the render() method. At least human mode should
+    be supported. The "name" metadata allows the environment to be pretty
+    printed.
     """
 
     metadata = {'render_modes': ['human'], 'name': 'rps_v2'}
@@ -99,7 +102,8 @@ class raw_env(AECEnv):
     def render(self):
         """Renders the environment.
 
-        In human mode, it can print to terminal, open up a graphical window, or open up some other display that a human can see and understand.
+        In human mode, it can print to terminal, open up a graphical window, or
+        open up some other display that a human can see and understand.
         """
         if self.render_mode is None:
             gymnasium.logger.warn(
@@ -118,7 +122,8 @@ class raw_env(AECEnv):
     def observe(self, agent):
         """Observe should return the observation of the specified agent.
 
-        This function should return a sane observation (though not necessarily the most up to date possible) at any time after reset() is called.
+        This function should return a sane observation (though not necessarily
+        the most up to date possible) at any time after reset() is called.
         """
         # observation of one agent is the previous state of the other
         return np.array(self.observations[agent])

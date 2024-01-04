@@ -1,7 +1,7 @@
 class QMixConfig:
     """Configuration class for QMix model.
-    
-    QMixConfig contains parameters used to instantiate a QMix model. 
+
+    QMixConfig contains parameters used to instantiate a QMix model.
     These parameters define the model architecture, behavior, and training settings.
 
     Args:
@@ -32,11 +32,11 @@ class QMixConfig:
         logger (str, optional): Logger to record logs.
     """
 
-    model_type: str = "qmix"
+    model_type: str = 'qmix'
 
     def __init__(
         self,
-        scenario: str = "3s_vs_3z",
+        scenario: str = '3s_vs_3z',
         replay_buffer_size: int = 5000,
         mixing_embed_dim: int = 32,
         rnn_hidden_dim: int = 64,
@@ -57,10 +57,10 @@ class QMixConfig:
         hypernet_embed_dim: int = 64,
         update_learner_freq: int = 2,
         double_q: bool = True,
-        difficulty: str = "7",
-        algo_name: str = "qmix",
-        log_dir: str = "work_dirs/",
-        logger: str = "wandb",
+        difficulty: str = '7',
+        algo_name: str = 'qmix',
+        log_dir: str = 'work_dirs/',
+        logger: str = 'wandb',
     ) -> None:
         # Environment parameters
         self.scenario = scenario
