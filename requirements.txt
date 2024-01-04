@@ -1,17 +1,13 @@
 numpy
-Pillow
 protobuf
-pybullet
 pygame
 pyglet
 PyYAML
-requests
 scipy
 six
 tensorboard
 tensorboard-logger
 tensorboardX
-termcolor
 torch
 torchvision
 tqdm

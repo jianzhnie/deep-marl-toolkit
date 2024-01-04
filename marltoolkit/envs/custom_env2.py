@@ -27,7 +27,8 @@ REWARD_MAP = {
 def env(render_mode=None):
     """The env function often wraps the environment in wrappers by default.
 
-    You can find full documentation for these methods elsewhere in the developer documentation.
+    You can find full documentation for these methods elsewhere in the
+    developer documentation.
     """
     internal_render_mode = render_mode if render_mode != 'ansi' else 'human'
     env = raw_env(render_mode=internal_render_mode)
@@ -90,7 +91,8 @@ class parallel_env(ParallelEnv):
     def render(self):
         """Renders the environment.
 
-        In human mode, it can print to terminal, open up a graphical window, or open up some other display that a human can see and understand.
+        In human mode, it can print to terminal, open up a graphical window, or
+        open up some other display that a human can see and understand.
         """
         if self.render_mode is None:
             gymnasium.logger.warn(
@@ -116,7 +118,8 @@ class parallel_env(ParallelEnv):
         """Reset needs to initialize the `agents` attribute and must set up the
         environment so that render(), and step() can be called without issues.
 
-        Here it initializes the `num_moves` variable which counts the number of hands that are played. Returns the observations for each agent
+        Here it initializes the `num_moves` variable which counts the number of
+        hands that are played. Returns the observations for each agent
         """
         self.agents = self.possible_agents[:]
         self.num_moves = 0
