@@ -1,9 +1,16 @@
 import numpy as np
 
+from marltoolkit.agents import BaseAgent
 from marltoolkit.data.ma_replaybuffer import EpisodeData, ReplayBuffer
+from marltoolkit.envs import MultiAgentEnv
 
 
-def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):
+def run_train_episode(
+    env: MultiAgentEnv,
+    agent: BaseAgent,
+    rpm: ReplayBuffer,
+    config: dict = None,
+):
 
     episode_limit = config['episode_limit']
     agent.reset_agent()
@@ -55,7 +62,11 @@ def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):
     return episode_reward, episode_step, is_win, mean_loss, mean_td_error
 
 
-def run_evaluate_episode(env, agent, num_eval_episodes=5):
+def run_evaluate_episode(
+    env: MultiAgentEnv,
+    agent: BaseAgent,
+    num_eval_episodes: int = 5,
+):
     eval_is_win_buffer = []
     eval_reward_buffer = []
     eval_steps_buffer = []
