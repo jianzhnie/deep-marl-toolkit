@@ -48,9 +48,6 @@ class VDNAgent(BaseAgent):
         check_model_method(agent_model, 'forward', self.__class__.__name__)
         if mixer_model is not None:
             check_model_method(mixer_model, 'forward', self.__class__.__name__)
-            assert hasattr(mixer_model, 'n_agents') and not callable(
-                getattr(mixer_model, 'n_agents',
-                        None)), 'mixer_model needs to have attribute n_agents'
         assert isinstance(gamma, float)
         assert isinstance(learning_rate, float)
 
