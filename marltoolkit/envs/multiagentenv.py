@@ -30,6 +30,12 @@ class MultiAgentEnv(object):
         """Returns the available actions for agent_id."""
         raise NotImplementedError
 
+    def get_available_actions(self):
+        raise NotImplementedError
+
+    def _get_actions_one_hot(self):
+        raise NotImplementedError
+
     def get_total_actions(self):
         """Returns the total number of actions an agent could ever take."""
         # TODO: This is only suitable for a discrete 1 dimensional action space for each agent

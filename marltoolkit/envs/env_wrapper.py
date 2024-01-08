@@ -10,10 +10,12 @@ import numpy as np
 
 from marltoolkit.utils.transforms import OneHotTransform
 
+from .multiagentenv import MultiAgentEnv
+
 
 class SC2EnvWrapper(object):
 
-    def __init__(self, env):
+    def __init__(self, env: MultiAgentEnv):
         self.env = env
         env_info = env.get_env_info()
         self.episode_limit = env_info['episode_limit']

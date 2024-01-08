@@ -1,11 +1,20 @@
+import argparse
+
 import numpy as np
 
+from marltoolkit.agents import BaseAgent
 from marltoolkit.data.ma_replaybuffer import EpisodeData, ReplayBuffer
+from marltoolkit.envs import MultiAgentEnv
 
 
-def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):
+def run_train_episode(
+    env: MultiAgentEnv,
+    agent: BaseAgent,
+    rpm: ReplayBuffer,
+    args: argparse.Namespace = None,
+):
 
-    episode_limit = config['episode_limit']
+    episode_limit = args.episode_limit
     agent.reset_agent()
     episode_reward = 0.0
     episode_step = 0
@@ -13,10 +22,10 @@ def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):
     state, obs = env.reset()
     episode_experience = EpisodeData(
         episode_limit=episode_limit,
-        state_shape=config['state_shape'],
-        obs_shape=config['obs_shape'],
-        num_actions=config['n_actions'],
-        num_agents=config['n_agents'],
+        state_shape=args.state_shape,
+        obs_shape=args.obs_shape,
+        num_actions=args.n_actions,
+        num_agents=args.n_agents,
     )
 
     while not terminated:
@@ -42,9 +51,9 @@ def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):
 
     mean_loss = []
     mean_td_error = []
-    if rpm.size() > config['memory_warmup_size']:
-        for _ in range(config['update_learner_freq']):
-            batch = rpm.sample_batch(config['batch_size'])
+    if rpm.size() > args.memory_warmup_size:
+        for _ in range(args.update_learner_freq):
+            batch = rpm.sample_batch(args.batch_size)
             loss, td_error = agent.learn(**batch)
             mean_loss.append(loss)
             mean_td_error.append(td_error)
@@ -55,7 +64,11 @@ def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):
     return episode_reward, episode_step, is_win, mean_loss, mean_td_error
 
 
-def run_evaluate_episode(env, agent, num_eval_episodes=5):
+def run_evaluate_episode(
+    env: MultiAgentEnv,
+    agent: BaseAgent,
+    num_eval_episodes: int = 5,
+):
     eval_is_win_buffer = []
     eval_reward_buffer = []
     eval_steps_buffer = []
