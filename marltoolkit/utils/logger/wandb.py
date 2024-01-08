@@ -2,6 +2,7 @@
 ml/tianshou/tree/master/tianshou/utils/logger."""
 
 import argparse
+import contextlib
 import os
 from typing import Callable, Optional, Tuple
 
@@ -10,10 +11,8 @@ from torch.utils.tensorboard import SummaryWriter
 from .base import LOG_DATA_TYPE, BaseLogger
 from .tensorboard import TensorboardLogger
 
-try:
+with contextlib.suppress(ImportError):
     import wandb
-except ImportError:
-    pass
 
 
 class WandbLogger(BaseLogger):
@@ -27,17 +26,17 @@ class WandbLogger(BaseLogger):
 
         logger = WandbLogger()
         logger.load(SummaryWriter(log_path))
-        result = onpolicy_trainer(policy, train_collector, test_collector,
-                                  logger=logger)
+        result = OnpolicyTrainer(policy, train_collector, test_collector,
+                                  logger=logger).run()
 
-    :param str dir: An absolute path to a directory where metadata will be stored.
-    :param int train_interval: the log interval in log_train_data(). Default to 1000.
-    :param int test_interval: the log interval in log_test_data(). Default to 1.
-    :param int update_interval: the log interval in log_update_data().
+    :param train_interval: the log interval in log_train_data(). Default to 1000.
+    :param test_interval: the log interval in log_test_data(). Default to 1.
+    :param update_interval: the log interval in log_update_data().
         Default to 1000.
-    :param int save_interval: the save interval in save_data(). Default to 1 (save at
+    :param info_interval: the log interval in log_info_data(). Default to 1.
+    :param save_interval: the save interval in save_data(). Default to 1 (save at
         the end of each epoch).
-    :param bool write_flush: whether to flush tensorboard result after each
+    :param write_flush: whether to flush tensorboard result after each
         add_scalar operation. Default to True.
     :param str project: W&B project name. Default to "tianshou".
     :param str name: W&B run name. Default to None. If None, random name is assigned.
@@ -52,6 +51,7 @@ class WandbLogger(BaseLogger):
         train_interval: int = 1000,
         test_interval: int = 1,
         update_interval: int = 1000,
+        info_interval: int = 1,
         save_interval: int = 1000,
         write_flush: bool = True,
         project: Optional[str] = None,
@@ -59,14 +59,16 @@ class WandbLogger(BaseLogger):
         entity: Optional[str] = None,
         run_id: Optional[str] = None,
         config: Optional[argparse.Namespace] = None,
+        monitor_gym: bool = True,
     ) -> None:
-        super().__init__(train_interval, test_interval, update_interval)
+        super().__init__(train_interval, test_interval, update_interval,
+                         info_interval)
         self.last_save_step = -1
         self.save_interval = save_interval
         self.write_flush = write_flush
         self.restored = False
         if project is None:
-            project = os.getenv('WANDB_PROJECT', 'tianshou')
+            project = os.getenv('WANDB_PROJECT', 'marltoolkit')
 
         self.wandb_run = wandb.init(
             dir=dir,
@@ -76,17 +78,22 @@ class WandbLogger(BaseLogger):
             resume='allow',
             entity=entity,
             sync_tensorboard=True,
-            monitor_gym=True,
+            monitor_gym=monitor_gym,
             config=config,  # type: ignore
         ) if not wandb.run else wandb.run
-        self.wandb_run._label(repo='tianshou')  # type: ignore
+        self.wandb_run._label(repo='marltoolkit')  # type: ignore
         self.tensorboard_logger: Optional[TensorboardLogger] = None
 
     def load(self, writer: SummaryWriter) -> None:
         self.writer = writer
         self.tensorboard_logger = TensorboardLogger(
-            writer, self.train_interval, self.test_interval,
-            self.update_interval, self.save_interval, self.write_flush)
+            writer,
+            self.train_interval,
+            self.test_interval,
+            self.update_interval,
+            self.save_interval,
+            self.write_flush,
+        )
 
     def write(self, step_type: str, step: int, data: LOG_DATA_TYPE) -> None:
         if self.tensorboard_logger is None:
@@ -106,9 +113,9 @@ class WandbLogger(BaseLogger):
         """Use writer to log metadata when calling ``save_checkpoint_fn`` in
         trainer.
 
-        :param int epoch: the epoch in trainer.
-        :param int env_step: the env_step in trainer.
-        :param int gradient_step: the gradient_step in trainer.
+        :param epoch: the epoch in trainer.
+        :param env_step: the env_step in trainer.
+        :param gradient_step: the gradient_step in trainer.
         :param function save_checkpoint_fn: a hook defined by user, see trainer
             documentation for detail.
         """

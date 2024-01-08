@@ -14,12 +14,13 @@ class TensorboardLogger(BaseLogger):
     visualize and log statistics.
 
     :param SummaryWriter writer: the writer to log data.
-    :param int train_interval: the log interval in log_train_data(). Default to 1000.
-    :param int test_interval: the log interval in log_test_data(). Default to 1.
-    :param int update_interval: the log interval in log_update_data(). Default to 1000.
-    :param int save_interval: the save interval in save_data(). Default to 1 (save at
+    :param train_interval: the log interval in log_train_data(). Default to 1000.
+    :param test_interval: the log interval in log_test_data(). Default to 1.
+    :param update_interval: the log interval in log_update_data(). Default to 1000.
+    :param info_interval: the log interval in log_info_data(). Default to 1.
+    :param save_interval: the save interval in save_data(). Default to 1 (save at
         the end of each epoch).
-    :param bool write_flush: whether to flush tensorboard result after each
+    :param write_flush: whether to flush tensorboard result after each
         add_scalar operation. Default to True.
     """
 
@@ -29,10 +30,12 @@ class TensorboardLogger(BaseLogger):
         train_interval: int = 1000,
         test_interval: int = 1,
         update_interval: int = 1000,
+        info_interval: int = 1,
         save_interval: int = 1,
         write_flush: bool = True,
     ) -> None:
-        super().__init__(train_interval, test_interval, update_interval)
+        super().__init__(train_interval, test_interval, update_interval,
+                         info_interval)
         self.save_interval = save_interval
         self.write_flush = write_flush
         self.last_save_step = -1
