@@ -78,8 +78,8 @@ def main():
 
     agent_model = RNNModel(
         input_shape=args.obs_shape,
-        n_actions=args.n_actions,
         rnn_hidden_dim=args.rnn_hidden_dim,
+        n_actions=args.n_actions,
     )
 
     marl_agent = IDQNAgent(
