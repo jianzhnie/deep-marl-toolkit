@@ -41,13 +41,11 @@ def main():
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     # log
     log_name = os.path.join(args.project, args.scenario, args.algo_name,
-                            timestamp)
-    text_log_path = os.path.join(args.log_dir, args.project, args.scenario,
-                                 args.algo_name)
-    tensorboard_log_path = get_outdir(text_log_path, 'log_dir')
-    log_file = os.path.join(
-        text_log_path,
-        log_name.replace(os.path.sep, '_') + f'{timestamp}.log')
+                            timestamp).replace(os.path.sep, '_')
+    log_path = os.path.join(args.log_dir, args.project, args.scenario,
+                            args.algo_name)
+    tensorboard_log_path = get_outdir(log_path, 'tensorboard_log_dir')
+    log_file = os.path.join(log_path, log_name + '.log')
     text_logger = get_root_logger(log_file=log_file, log_level='INFO')
 
     if args.logger == 'wandb':
@@ -56,10 +54,9 @@ def main():
             test_interval=args.test_log_interval,
             update_interval=args.train_log_interval,
             project=args.project,
-            name=log_name.replace(os.path.sep, '_'),
+            name=log_name,
             save_interval=1,
             config=args,
-            entity='jianzhnie',
         )
     writer = SummaryWriter(tensorboard_log_path)
     writer.add_text('args', str(args))
@@ -81,8 +78,8 @@ def main():
 
     agent_model = RNNModel(
         input_shape=args.obs_shape,
-        n_actions=args.n_actions,
         rnn_hidden_dim=args.rnn_hidden_dim,
+        n_actions=args.n_actions,
     )
 
     marl_agent = IDQNAgent(
