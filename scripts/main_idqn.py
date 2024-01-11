@@ -1,3 +1,6 @@
+"""This script contains the main function for running the IDQN (Independent
+Deep Q-Network) algorithm in a StarCraft II environment."""
+
 import argparse
 import os
 import sys
@@ -11,7 +14,7 @@ sys.path.append('../')
 from configs.arguments import get_common_args
 from configs.idqn_config import IDQNConfig
 from marltoolkit.agents import IDQNAgent
-from marltoolkit.data.ma_replaybuffer import ReplayBuffer
+from marltoolkit.data.ma_replaybuffer import MaReplayBuffer
 from marltoolkit.envs.env_wrapper import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
@@ -21,11 +24,19 @@ from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
 
 
 def main():
+    """The main function for running the IDQN algorithm.
+
+    It initializes the necessary components such as the environment, agent,
+    logger, and replay buffer. Then, it performs training episodes and
+    evaluation episodes, logging the results at specified intervals.
+    """
+
     qmix_config = IDQNConfig()
     common_args = get_common_args()
     args = argparse.Namespace(**vars(common_args), **vars(qmix_config))
-    device = torch.device('cuda') if torch.cuda.is_available(
-    ) and args.cuda else torch.device('cpu')
+    device = (
+        torch.device('cuda')
+        if torch.cuda.is_available() and args.cuda else torch.device('cpu'))
 
     env = StarCraft2Env(map_name=args.scenario, difficulty=args.difficulty)
 
@@ -65,14 +76,13 @@ def main():
     else:  # wandb
         logger.load(writer)
 
-    rpm = ReplayBuffer(
-        max_size=args.replay_buffer_size,
+    rpm = MaReplayBuffer(
+        buffer_size=args.replay_buffer_size,
         episode_limit=args.episode_limit,
         state_shape=args.state_shape,
         obs_shape=args.obs_shape,
         num_agents=args.n_agents,
         num_actions=args.n_actions,
-        batch_size=args.batch_size,
         device=args.device,
     )
 
@@ -108,8 +118,13 @@ def main():
     episode_cnt = 0
     progress_bar = ProgressBar(args.total_steps)
     while steps_cnt < args.total_steps:
-        episode_reward, episode_step, is_win, mean_loss, mean_td_error = run_train_episode(
-            env, marl_agent, rpm, args)
+        (
+            episode_reward,
+            episode_step,
+            is_win,
+            mean_loss,
+            mean_td_error,
+        ) = run_train_episode(env, marl_agent, rpm, args)
         # update episodes and steps
         episode_cnt += 1
         steps_cnt += episode_step
@@ -146,7 +161,7 @@ def main():
             test_results = {
                 'env_step': eval_steps,
                 'rewards': eval_rewards,
-                'win_rate': eval_win_rate
+                'win_rate': eval_win_rate,
             }
             logger.log_test_data(test_results, steps_cnt)
 
