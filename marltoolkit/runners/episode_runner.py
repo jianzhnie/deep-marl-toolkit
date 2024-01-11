@@ -3,14 +3,14 @@ import argparse
 import numpy as np
 
 from marltoolkit.agents import BaseAgent
-from marltoolkit.data.ma_replaybuffer import EpisodeData, ReplayBuffer
+from marltoolkit.data.ma_replaybuffer import EpisodeData, MaReplayBuffer
 from marltoolkit.envs import MultiAgentEnv
 
 
 def run_train_episode(
     env: MultiAgentEnv,
     agent: BaseAgent,
-    rpm: ReplayBuffer,
+    rpm: MaReplayBuffer,
     args: argparse.Namespace = None,
 ):
 
