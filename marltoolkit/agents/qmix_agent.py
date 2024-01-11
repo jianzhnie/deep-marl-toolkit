@@ -113,7 +113,7 @@ class QMixAgent(BaseAgent):
             self.target_hidden_states = self.target_hidden_states.unsqueeze(
                 0).expand(batch_size, self.n_agents, -1)
 
-    def sample(self, obs, available_actions):
+    def sample(self, obs: np.ndarray, available_actions: np.ndarray):
         ''' sample actions via epsilon-greedy
         Args:
             obs (np.ndarray):               (n_agents, obs_shape)
@@ -135,7 +135,7 @@ class QMixAgent(BaseAgent):
         self.exploration = max(self.ep_scheduler.step(), self.min_exploration)
         return actions
 
-    def predict(self, obs, available_actions):
+    def predict(self, obs: np.ndarray, available_actions: np.ndarray):
         '''take greedy actions
         Args:
             obs (np.ndarray):               (n_agents, obs_shape)
@@ -158,8 +158,17 @@ class QMixAgent(BaseAgent):
         if self.mixer_model is not None:
             hard_target_update(self.mixer_model, self.target_mixer_model)
 
-    def learn(self, state_batch, actions_batch, reward_batch, terminated_batch,
-              obs_batch, available_actions_batch, filled_batch, **kwargs):
+    def learn(
+        self,
+        state_batch: np.ndarray,
+        actions_batch: np.ndarray,
+        reward_batch: np.ndarray,
+        terminated_batch: np.ndarray,
+        obs_batch: np.ndarray,
+        available_actions_batch: np.ndarray,
+        filled_batch: np.ndarray,
+        **kwargs,
+    ):
         '''
         Args:
             state (np.ndarray):                   (batch_size, T, state_shape)
@@ -281,11 +290,13 @@ class QMixAgent(BaseAgent):
 
         return loss.item(), mean_td_error.item()
 
-    def save(self,
-             save_dir: str = None,
-             agent_model_name: str = 'agent_model.th',
-             mixer_model_name: str = 'mixer_model.th',
-             opt_name: str = 'optimizer.th'):
+    def save_model(
+        self,
+        save_dir: str = None,
+        agent_model_name: str = 'agent_model.th',
+        mixer_model_name: str = 'mixer_model.th',
+        opt_name: str = 'optimizer.th',
+    ):
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
         agent_model_path = os.path.join(save_dir, agent_model_name)
@@ -296,11 +307,13 @@ class QMixAgent(BaseAgent):
         torch.save(self.optimizer.state_dict(), optimizer_path)
         print('save model successfully!')
 
-    def restore(self,
-                save_dir: str = None,
-                agent_model_name: str = 'agent_model.th',
-                mixer_model_name: str = 'mixer_model.th',
-                opt_name: str = 'optimizer.th'):
+    def load_model(
+        self,
+        save_dir: str = None,
+        agent_model_name: str = 'agent_model.th',
+        mixer_model_name: str = 'mixer_model.th',
+        opt_name: str = 'optimizer.th',
+    ):
         agent_model_path = os.path.join(save_dir, agent_model_name)
         mixer_model_path = os.path.join(save_dir, mixer_model_name)
         optimizer_path = os.path.join(save_dir, opt_name)
