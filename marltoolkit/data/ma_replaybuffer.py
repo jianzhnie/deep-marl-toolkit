@@ -10,7 +10,7 @@ class BaseBuffer(ABC):
 
     def __init__(
         self,
-        n_envs: int,
+        num_envs: int,
         buffer_size: int,
         num_agents: int,
         state_space: Union[int, Tuple],
@@ -27,7 +27,7 @@ class BaseBuffer(ABC):
         self.action_space = action_space
         self.reward_space = reward_space
         self.done_space = done_space
-        self.n_envs = n_envs
+        self.num_envs = num_envs
         self.buffer_size = buffer_size
 
     @abstractmethod
@@ -54,12 +54,17 @@ class BaseBuffer(ABC):
 
 class EpisodeData(object):
 
-    def __init__(self, episode_limit: int, state_space: Union[int, Tuple],
-                 obs_space: Union[int,
-                                  Tuple], num_actions: int, num_agents: int):
+    def __init__(
+        self,
+        episode_limit: int,
+        state_shape: Union[int, Tuple],
+        obs_shape: Union[int, Tuple],
+        num_actions: int,
+        num_agents: int,
+    ):
 
-        self.obs_buf = np.zeros((episode_limit, num_agents, obs_space))
-        self.state_buf = np.zeros((episode_limit, state_space))
+        self.obs_buf = np.zeros((episode_limit, num_agents, obs_shape))
+        self.state_buf = np.zeros((episode_limit, state_shape))
         self.action_buf = np.zeros((episode_limit, num_agents))
         self.action_onehot_buf = np.zeros(
             (episode_limit, num_agents, num_actions))
@@ -74,9 +79,17 @@ class EpisodeData(object):
         self._curr_size = 0
         self.episode_limit = episode_limit
 
-    def add(self, state, obs, actions, actions_onehot, available_actions,
-            rewards, terminated, filled):
-
+    def add(
+        self,
+        state: np.ndarray,
+        obs: np.ndarray,
+        actions: np.ndarray,
+        actions_onehot: np.ndarray,
+        available_actions: np.ndarray,
+        rewards: np.ndarray,
+        terminated: np.ndarray,
+        filled: np.ndarray,
+    ):
         assert self.size() < self.episode_limit
         self.obs_buf[self._curr_ptr] = obs
         self.state_buf[self._curr_ptr] = state
@@ -91,14 +104,14 @@ class EpisodeData(object):
         self._curr_ptr += 1
         self._curr_size = min(self._curr_size + 1, self.episode_limit)
 
-    def fill_mask(self):
+    def fill_mask(self) -> None:
         assert self.size() < self.episode_limit
         self.terminal_buf[self._curr_ptr] = True
         self.filled_buf[self._curr_ptr] = 1.0
         self._curr_ptr += 1
         self._curr_size = min(self._curr_size + 1, self.episode_limit)
 
-    def get_data(self):
+    def get_data(self) -> Dict[str, np.ndarray]:
         """Get all the data in an episode."""
         assert self.size() == self.episode_limit
         episode_data = dict(
@@ -169,16 +182,16 @@ class MaReplayBuffer(object):
     def __init__(self,
                  buffer_size: int,
                  episode_limit: int,
-                 state_space: Union[int, Tuple],
-                 obs_space: Union[int, Tuple],
+                 state_shape: Union[int, Tuple],
+                 obs_shape: Union[int, Tuple],
                  num_agents: int,
                  num_actions: int,
                  dtype: torch.dtype = torch.float32,
                  device: str = 'cpu'):
 
         self.obs_buf = np.zeros(
-            (buffer_size, episode_limit, num_agents, obs_space))
-        self.state_buf = np.zeros((buffer_size, episode_limit, state_space))
+            (buffer_size, episode_limit, num_agents, obs_shape))
+        self.state_buf = np.zeros((buffer_size, episode_limit, state_shape))
         self.action_buf = np.zeros((buffer_size, episode_limit, num_agents))
         self.action_onehot_buf = np.zeros(
             (buffer_size, episode_limit, num_agents, num_actions))
@@ -188,8 +201,8 @@ class MaReplayBuffer(object):
         self.terminal_buf = np.zeros((buffer_size, episode_limit, 1))
         self.filled_buf = np.zeros((buffer_size, episode_limit, 1))
 
-        self.state_space = state_space
-        self.obs_space = obs_space
+        self.state_shape = state_shape
+        self.obs_shape = obs_shape
         self.num_actions = num_actions
         self.num_agents = num_agents
 
@@ -277,6 +290,96 @@ class MaReplayBuffer(object):
         return self._curr_size
 
 
+class MaEpisodeData(object):
+
+    def __init__(
+        self,
+        num_envs: int,
+        num_agents: int,
+        episode_limit: int,
+        state_space: Union[int, Tuple],
+        obs_space: Union[int, Tuple],
+        actions_sapce: Union[int, Tuple],
+        reward_space: Union[int, Tuple],
+        done_space: Union[int, Tuple],
+    ):
+        self.num_envs = num_envs
+        self.episode_limit = episode_limit
+        self.state_space = state_space
+        self.obs_buf = np.zeros((num_envs, num_agents, episode_limit) +
+                                obs_space)
+        self.action_buf = np.zeros((num_envs, num_agents, episode_limit) +
+                                   actions_sapce)
+        self.action_onehot_buf = np.zeros((num_envs, num_agents,
+                                           episode_limit) + actions_sapce)
+        self.available_action_buf = np.zeros((num_envs, num_agents,
+                                              episode_limit) + actions_sapce)
+        self.reward_buf = np.zeros((num_envs, episode_limit) + reward_space)
+        self.terminal_buf = np.zeros((num_envs, episode_limit) + done_space)
+        self.filled_buf = np.zeros((num_envs, episode_limit) + done_space)
+        if self.state_space is not None:
+            self.state_buf = np.zeros((num_envs, num_agents, episode_limit) +
+                                      state_space)
+
+        # memory management
+        self._curr_ptr = 0
+        self._curr_size = 0
+
+    def store_episodes(
+        self,
+        state: np.ndarray,
+        obs: np.ndarray,
+        actions: np.ndarray,
+        actions_onehot: np.ndarray,
+        available_actions: np.ndarray,
+        rewards: np.ndarray,
+        terminated: np.ndarray,
+        filled: np.ndarray,
+    ):
+        assert self.size() < self.episode_limit
+        self.obs_buf[self._curr_ptr] = obs
+        self.action_buf[self._curr_ptr] = actions
+        self.action_onehot_buf[self._curr_ptr] = actions_onehot
+        self.available_action_buf[self._curr_ptr] = available_actions
+        self.reward_buf[self._curr_ptr] = rewards
+        self.terminal_buf[self._curr_ptr] = terminated
+        self.filled_buf[self._curr_ptr] = filled
+
+        if self.state_space is not None:
+            self.state_buf[self._curr_ptr] = state
+
+        self._curr_ptr += 1
+        self._curr_size = min(self._curr_size + 1, self.episode_limit)
+
+    def fill_mask(self):
+        assert self.size() < self.episode_limit
+        self.terminal_buf[self._curr_ptr] = True
+        self.filled_buf[self._curr_ptr] = 1.0
+        self._curr_ptr += 1
+        self._curr_size = min(self._curr_size + 1, self.episode_limit)
+
+    def get_data(self):
+        """Get all the data in an episode."""
+        assert self.size() == self.episode_limit
+        episode_data = dict(
+            state=self.state_buf,
+            obs=self.obs_buf,
+            actions=self.action_buf,
+            actions_onehot=self.action_onehot_buf,
+            rewards=self.reward_buf,
+            terminated=self.terminal_buf,
+            available_actions=self.available_action_buf,
+            filled=self.filled_buf)
+        return episode_data
+
+    def size(self) -> int:
+        """get current size of replay memory."""
+        return self._curr_size
+
+    def __len__(self):
+        return self._curr_size
+
+
 class OffPolicyBuffer(BaseBuffer):
     """Replay buffer for off-policy MARL algorithms.
 
@@ -287,7 +390,7 @@ class OffPolicyBuffer(BaseBuffer):
         action_space: action space for one agent (suppose same actions space for group agents).
         reward_space: reward space.
         done_space: terminal variable space.
-        n_envs: number of parallel environments.
+        num_envs: number of parallel environments.
         buffer_size: buffer size for one environment.
         **kwargs: other arguments.
     """
@@ -329,50 +432,53 @@ class OffPolicyBuffer(BaseBuffer):
 
     def reset_buffer(self):
         if self.store_global_state:
-            self.state_buf = np.zeros((self.n_envs, self.max_size) +
+            self.state_buf = np.zeros((self.num_envs, self.max_size) +
                                       self.state_space)
-            self.state_next = np.zeros((self.n_envs, self.max_size) +
+            self.state_next = np.zeros((self.num_envs, self.max_size) +
                                        self.state_space)
-        self.obs_buf = np.zeros((self.n_envs, self.max_size) + self.obs_space)
-        self.obs_next_buf = np.zeros((self.n_envs, self.max_size) +
+        self.obs_buf = np.zeros((self.num_envs, self.max_size) +
+                                self.obs_space)
+        self.obs_next_buf = np.zeros((self.num_envs, self.max_size) +
                                      self.obs_space)
-        self.action_buf = np.zeros((self.n_envs, self.max_size) +
+        self.action_buf = np.zeros((self.num_envs, self.max_size) +
                                    self.action_space)
-        self.action_onehot_buf = np.zeros((self.n_envs, self.max_size,
+        self.action_onehot_buf = np.zeros((self.num_envs, self.max_size,
                                            self.num_agents) +
                                           self.action_space)
-        self.available_action_buf = np.zeros((self.n_envs, self.max_size,
+        self.available_action_buf = np.zeros((self.num_envs, self.max_size,
                                               self.num_agents) +
                                              self.action_space)
         self.agent_mask_buf = np.zeros(
-            (self.n_envs, self.max_size, self.num_agents)).astype(np.bool)
-        self.reward_buf = np.zeros((self.n_envs, self.max_size) +
+            (self.num_envs, self.max_size, self.num_agents)).astype(np.bool)
+        self.reward_buf = np.zeros((self.num_envs, self.max_size) +
                                    self.reward_space)
-        self.terminal_buf = np.zeros((self.n_envs, self.max_size) +
+        self.terminal_buf = np.zeros((self.num_envs, self.max_size) +
                                      self.done_space).astype(np.bool)
-        self.filled_buf = np.zeros((self.n_envs, self.max_size) +
+        self.filled_buf = np.zeros((self.num_envs, self.max_size) +
                                    self.done_space).astype(np.bool)
 
         self.buffers = dict(
-            obs=np.zeros((self.n_envs, self.max_size) + self.obs_space),
-            obs_next=np.zeros((self.n_envs, self.max_size) + self.obs_space),
-            actions=np.zeros((self.n_envs, self.max_size) + self.action_space),
-            actions_onehot=np.zeros((self.n_envs, self.max_size,
+            obs=np.zeros((self.num_envs, self.max_size) + self.obs_space),
+            obs_next=np.zeros((self.num_envs, self.max_size) + self.obs_space),
+            actions=np.zeros((self.num_envs, self.max_size) +
+                             self.action_space),
+            actions_onehot=np.zeros((self.num_envs, self.max_size,
                                      self.num_agents) + self.action_space),
-            available_actions=np.zeros((self.n_envs, self.max_size,
+            available_actions=np.zeros((self.num_envs, self.max_size,
                                         self.num_agents) + self.action_space),
-            agent_mask=np.zeros(
-                (self.n_envs, self.max_size, self.num_agents)).astype(np.bool),
-            rewards=np.zeros((self.n_envs, self.max_size) + self.reward_space),
-            terminated=np.zeros((self.n_envs, self.max_size) +
+            agent_mask=np.zeros((self.num_envs, self.max_size,
+                                 self.num_agents)).astype(np.bool),
+            rewards=np.zeros((self.num_envs, self.max_size) +
+                             self.reward_space),
+            terminated=np.zeros((self.num_envs, self.max_size) +
                                 self.done_space).astype(np.bool),
-            filled=np.zeros((self.n_envs, self.max_size) +
+            filled=np.zeros((self.num_envs, self.max_size) +
                             self.done_space).astype(np.bool),
         )
         if self.store_global_state:
-            self.buffers['state'] = np.zeros((self.n_envs, self.max_size) +
+            self.buffers['state'] = np.zeros((self.num_envs, self.max_size) +
                                              self.state_space)
-            self.buffers['state_next'] = np.zeros((self.n_envs,
+            self.buffers['state_next'] = np.zeros((self.num_envs,
                                                    self.max_size) +
                                                   self.state_space)
 
@@ -393,7 +499,7 @@ class OffPolicyBuffer(BaseBuffer):
             a batch of experience samples: obs, action, reward, next_obs, terminal
         """
         assert batch_size < self._curr_size, f'Batch Size: {batch_size} is larger than the current Buffer Size:{self._curr_size}'
-        env_idxs = np.random.randint(self.n_envs, size=batch_size)
+        env_idxs = np.random.randint(self.num_envs, size=batch_size)
         step_idxs = np.random.randint(self._curr_size, size=batch_size)
 
         batch = {
@@ -420,7 +526,7 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
         action_space: action space for one agent (suppose same actions space for group agents).
         reward_space: reward space.
         done_space: terminal variable space.
-        n_envs: number of parallel environments.
+        num_envs: number of parallel environments.
         buffer_size: buffer size for one environment.
         **kwargs: other arguments.
     """
@@ -451,32 +557,32 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
 
     def reset_buffer(self):
         self.buffers = dict(
-            obs=np.zeros((self.n_envs, self.max_size, self.num_agents,
+            obs=np.zeros((self.num_envs, self.max_size, self.num_agents,
                           self.max_eps_len) + self.obs_space),
-            obs_next=np.zeros((self.n_envs, self.num_agents,
+            obs_next=np.zeros((self.num_envs, self.num_agents,
                                self.max_eps_len) + self.obs_space),
-            actions=np.zeros((self.n_envs, self.num_agents, self.max_eps_len) +
-                             self.action_space),
-            actions_onehot=np.zeros((self.n_envs, self.num_agents,
+            actions=np.zeros((self.num_envs, self.num_agents,
+                              self.max_eps_len) + self.action_space),
+            actions_onehot=np.zeros((self.num_envs, self.num_agents,
                                      self.max_eps_len, self.num_agents) +
                                     self.action_space),
-            available_actions=np.zeros((self.n_envs, self.num_agents,
+            available_actions=np.zeros((self.num_envs, self.num_agents,
                                         self.max_eps_len, self.num_agents) +
                                        self.action_space),
             agent_mask=np.zeros(
-                (self.n_envs, self.num_agents, self.max_eps_len,
+                (self.num_envs, self.num_agents, self.max_eps_len,
                  self.num_agents)).astype(np.bool),
-            rewards=np.zeros((self.n_envs, self.max_eps_len) +
+            rewards=np.zeros((self.num_envs, self.max_eps_len) +
                              self.reward_space),
-            terminated=np.zeros((self.n_envs, self.max_eps_len) +
+            terminated=np.zeros((self.num_envs, self.max_eps_len) +
                                 self.done_space).astype(np.bool),
-            filled=np.zeros((self.n_envs, self.max_eps_len) +
+            filled=np.zeros((self.num_envs, self.max_eps_len) +
                             self.done_space).astype(np.bool),
         )
         if self.store_global_state:
-            self.buffers['state'] = np.zeros((self.n_envs, self.max_eps_len +
+            self.buffers['state'] = np.zeros((self.num_envs, self.max_eps_len +
                                               1) + self.state_space)
-            self.buffers['state_next'] = np.zeros((self.n_envs,
+            self.buffers['state_next'] = np.zeros((self.num_envs,
                                                    self.max_eps_len) +
                                                   self.state_space)
 
@@ -497,7 +603,7 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
             a batch of experience samples: obs, action, reward, next_obs, terminal
         """
         assert batch_size < self._curr_size, f'Batch Size: {batch_size} is larger than the current Buffer Size:{self._curr_size}'
-        env_idxs = np.random.randint(self.n_envs, size=batch_size)
+        env_idxs = np.random.randint(self.num_envs, size=batch_size)
         step_idxs = np.random.randint(self._curr_size, size=batch_size)
 
         batch = {
