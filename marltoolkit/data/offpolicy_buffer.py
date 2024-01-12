@@ -426,6 +426,8 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
         step_idxs = np.random.randint(self.curr_size, size=batch_size)
 
         batch = {key: self.buffers[key][step_idxs] for key in self.buffer_keys}
+        if to_torch:
+            batch = self.to_torch(batch)
         return batch
 
     def size(self) -> int:
