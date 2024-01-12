@@ -11,8 +11,8 @@ sys.path.append('../')
 from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.vdn_agent import VDNAgent
-from marltoolkit.data.ma_replaybuffer import MaReplayBuffer
-from marltoolkit.envs.env_wrapper import SC2EnvWrapper
+from marltoolkit.data import MaReplayBuffer
+from marltoolkit.envs import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
 from marltoolkit.modules.mixers import VDNMixer
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
@@ -75,7 +75,6 @@ def main():
         num_actions=args.n_actions,
         device=args.device,
     )
-
     agent_model = RNNModel(
         input_shape=args.obs_shape,
         rnn_hidden_dim=args.rnn_hidden_dim,

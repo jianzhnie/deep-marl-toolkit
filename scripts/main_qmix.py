@@ -11,8 +11,8 @@ sys.path.append('../')
 from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.qmix_agent import QMixAgent
-from marltoolkit.data.ma_replaybuffer import MaReplayBuffer
-from marltoolkit.envs.env_wrapper import SC2EnvWrapper
+from marltoolkit.data import MaReplayBuffer
+from marltoolkit.envs import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
 from marltoolkit.modules.mixers import QMixerModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,

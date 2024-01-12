@@ -14,8 +14,8 @@ sys.path.append('../')
 from configs.arguments import get_common_args
 from configs.idqn_config import IDQNConfig
 from marltoolkit.agents import IDQNAgent
-from marltoolkit.data.ma_replaybuffer import MaReplayBuffer
-from marltoolkit.envs.env_wrapper import SC2EnvWrapper
+from marltoolkit.data import MaReplayBuffer
+from marltoolkit.envs import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
                                                 run_train_episode)

@@ -13,7 +13,7 @@ import numpy as np
 
 from marltoolkit.utils.transforms import OneHotTransform
 
-from .multiagentenv import MultiAgentEnv
+from ..multiagentenv import MultiAgentEnv
 
 
 class SC2EnvWrapper(object):

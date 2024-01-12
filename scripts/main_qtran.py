@@ -12,8 +12,8 @@ sys.path.append('../')
 from configs.arguments import get_common_args
 from configs.qtran_config import QTranConfig
 from marltoolkit.agents.qtran_agent import QTranAgent
-from marltoolkit.data.ma_replaybuffer import ReplayBuffer
-from marltoolkit.envs.env_wrapper import SC2EnvWrapper
+from marltoolkit.data import MaReplayBuffer
+from marltoolkit.envs import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
 from marltoolkit.modules.mixers.qtran_mixer import QTransModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
@@ -70,7 +70,7 @@ def main():
     else:  # wandb
         logger.load(writer)
 
-    rpm = ReplayBuffer(
+    rpm = MaReplayBuffer(
         max_size=config['replay_buffer_size'],
         episode_limit=config['episode_limit'],
         state_shape=config['state_shape'],
