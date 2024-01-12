@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 
 from marltoolkit.agents import BaseAgent
-from marltoolkit.data.ma_replaybuffer import EpisodeData, MaReplayBuffer
+from marltoolkit.data import EpisodeData, MaReplayBuffer
 from marltoolkit.envs import MultiAgentEnv
 
 
