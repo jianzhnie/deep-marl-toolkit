@@ -1,5 +1,5 @@
-from .env_wrapper import SC2EnvWrapper
 from .multiagentenv import MultiAgentEnv
+from .sc_wrapper import SC2EnvWrapper
 
 # from .wargame_wrapper import GameParams, WarGameSAWrapper
 
