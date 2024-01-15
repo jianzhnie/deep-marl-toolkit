@@ -10,19 +10,20 @@ from copy import deepcopy
 from typing import List
 
 import numpy as np
+from smac.env import StarCraft2Env
 
 from marltoolkit.utils.transforms import OneHotTransform
 
-from ..multiagentenv import MultiAgentEnv
 
+class SC2Env(object):
 
-class SC2EnvWrapper(object):
+    def __init__(self, map_name: str = '3m'):
+        self.env = StarCraft2Env(map_name=map_name)
+        env_info = self.env.get_env_info()
 
-    def __init__(self, env: MultiAgentEnv):
-        self.env = env
-        env_info = env.get_env_info()
         self.n_agents = env_info['n_agents']
-        self.action_shape = self.n_actions = env_info['n_actions']
+        self.action_shape = env_info['n_actions']
+        self.n_actions = env_info['n_actions']
         self.state_shape = env_info['state_shape']
         self.obs_shape = env_info['obs_shape']
         self.dim_reward = self.n_agents
