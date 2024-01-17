@@ -7,7 +7,8 @@ import gymnasium
 import numpy as np
 from gymnasium import spaces
 from stable_baselines3.common.vec_env import VecEnvWrapper
-from utils.util import tile_images
+
+from ..utils.util import tile_images
 
 
 class VecEnv(ABC):

@@ -1,3 +1,3 @@
-from .sc2_env import SC2EnvWrapper
+from .sc2_env import SC2Env
 
-__all__ = ['SC2EnvWrapper']
+__all__ = ['SC2Env']

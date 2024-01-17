@@ -1,4 +1,9 @@
 class MultiAgentEnv(object):
+    """A multi-agent environment wrapper."""
+
+    def __init__(self):
+        self.n_agents = None
+        self.episode_limit = None
 
     def step(self, actions):
         """Returns reward, terminated, info."""

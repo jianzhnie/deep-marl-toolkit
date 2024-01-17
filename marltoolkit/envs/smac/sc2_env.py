@@ -7,7 +7,7 @@ Copyright (c) 2022 by jianzhnie@126.com, All Rights Reserved.
 import copy
 from ast import Tuple
 from copy import deepcopy
-from typing import List
+from typing import List, Union
 
 import numpy as np
 from smac.env import StarCraft2Env
@@ -21,19 +21,30 @@ class SC2Env(object):
         self.env = StarCraft2Env(map_name=map_name)
         env_info = self.env.get_env_info()
 
+        # how many agents and enemies
         self.n_agents = env_info['n_agents']
+        self.n_enemies = self.env.n_enemies
+
+        # how many actions
         self.action_shape = env_info['n_actions']
         self.n_actions = env_info['n_actions']
+        # state_shape, obs_shape
         self.state_shape = env_info['state_shape']
         self.obs_shape = env_info['obs_shape']
+        # reward_shape, done_shape
         self.dim_reward = self.n_agents
+        self.dim_done = self.n_agents
 
+        # space
         self.obs_space = (self.obs_shape, )
         self.act_space = (self.n_actions, )
+        self.reward_space = (self.dim_reward, )
+        self.done_space = (self.dim_done, )
+
+        # max episode steps
         self.episode_limit = env_info['episode_limit']
 
-        self.obs_shape_center = env_info[
-            'obs_shape'] + self.n_agents + self.n_actions
+        self.obs_concate_shape = self.obs_shape + self.n_agents + self.n_actions
         self.agent_id_one_hot_transform = OneHotTransform(self.n_agents)
         self.actions_one_hot_transform = OneHotTransform(self.n_actions)
         self._init_agents_id_one_hot(self.n_agents)
@@ -59,7 +70,10 @@ class SC2Env(object):
     def _get_agents_id_one_hot(self) -> np.ndarray:
         return deepcopy(self.agents_id_one_hot)
 
-    def _get_actions_one_hot(self, actions) -> np.ndarray:
+    def _get_actions_one_hot(
+        self,
+        actions: Union[np.ndarray, List[int]],
+    ) -> np.ndarray:
         # (n_agents，n_actions)
         actions_one_hot = []
         for action in actions:
@@ -102,16 +116,17 @@ class SC2Env(object):
             'episode_step': self._episode_step,
             'episode_score': self._episode_score,
         }
-        return state, obs_concate, info
+        return state, obs, obs_concate, info
 
-    def step(self, actions: List[int]) -> Tuple:
+    def step(self, actions: Union[np.ndarray, List[int]]) -> Tuple:
         reward, terminated, info = self.env.step(actions)
-        if info == {}:
+        if not info:
             info = self.buf_info
 
         obs = np.array(self.env.get_obs())
         state = np.array(self.env.get_state())
         reward_n = np.array([[reward] for _ in range(self.n_agents)])
+
         last_actions_one_hot = self._get_actions_one_hot(actions)
 
         self._episode_step += 1
@@ -121,8 +136,8 @@ class SC2Env(object):
         info['episode_score'] = self._episode_score
 
         truncated = True if self._episode_step >= self.episode_limit else False
-        # obs shape: (self.n_agents, (obs_dim + self.n_actions + self.n_agents ))
-        concate_obs = np.concatenate(
+        # obs shape: self.obs_shape_concate
+        obs_concate = np.concatenate(
             [obs, last_actions_one_hot, self.agents_id_one_hot], axis=-1)
-        return state, obs, concate_obs, reward_n, [terminated], [truncated
+        return state, obs, obs_concate, reward_n, [terminated], [truncated
                                                                  ], info
