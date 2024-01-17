@@ -3,8 +3,9 @@ import multiprocessing as mp
 import numpy as np
 from gymnasium.spaces import Box, Discrete
 
-from ..vec_env import (CloudpickleWrapper, VecEnv, clear_mpi_env_vars,
-                       combined_shape, flatten_list)
+from marltoolkit.envs.subproc_vec_env import clear_mpi_env_vars
+from marltoolkit.envs.vec_env import CloudpickleWrapper, VecEnv
+from marltoolkit.utils.util import combined_shape
 
 
 def worker(remote, parent_remote, env_fn_wrappers):
@@ -42,7 +43,7 @@ def worker(remote, parent_remote, env_fn_wrappers):
             env.close()
 
 
-class SubprocVecEnv_StarCraft2(VecEnv):
+class SubprocVecEnvSC2(VecEnv):
     """VecEnv that runs multiple environments in parallel in subproceses and
     communicates with them via pipes.
 
@@ -101,9 +102,9 @@ class SubprocVecEnv_StarCraft2(VecEnv):
             combined_shape(self.num_envs, self.obs_shape), dtype=np.float32)
         self.buf_state = np.zeros(
             combined_shape(self.num_envs, self.dim_state), dtype=np.float32)
-        self.buf_terminal = np.zeros((self.num_envs, 1), dtype=np.bool)
-        self.buf_truncation = np.zeros((self.num_envs, 1), dtype=np.bool)
-        self.buf_done = np.zeros((self.num_envs, ), dtype=np.bool)
+        self.buf_terminal = np.zeros((self.num_envs, 1), dtype=bool)
+        self.buf_truncation = np.zeros((self.num_envs, 1), dtype=bool)
+        self.buf_done = np.zeros((self.num_envs, ), dtype=bool)
         self.buf_rew = np.zeros(
             (self.num_envs, ) + self.rew_shape, dtype=np.float32)
         self.buf_info = [{} for _ in range(self.num_envs)]
@@ -119,11 +120,10 @@ class SubprocVecEnv_StarCraft2(VecEnv):
         for remote in self.remotes:
             remote.send(('reset', None))
         result = [remote.recv() for remote in self.remotes]
-        result = flatten_list(result)
         obs, state, infos = zip(*result)
         self.buf_obs, self.buf_state, self.buf_info = np.array(obs), np.array(
             state), list(infos)
-        self.buf_done = np.zeros((self.num_envs, ), dtype=np.bool)
+        self.buf_done = np.zeros((self.num_envs, ), dtype=bool)
         return self.buf_obs.copy(), self.buf_state.copy(), self.buf_info.copy()
 
     def step_async(self, actions):
@@ -142,7 +142,6 @@ class SubprocVecEnv_StarCraft2(VecEnv):
                     range(self.num_envs), self.buf_done, self.remotes):
                 if not env_done:
                     result = remote.recv()
-                    result = flatten_list(result)
                     obs, state, rew, terminal, truncated, infos = result
                     self.buf_obs[idx_env], self.buf_state[idx_env] = np.array(
                         obs), np.array(state)
@@ -185,7 +184,6 @@ class SubprocVecEnv_StarCraft2(VecEnv):
         for pipe in self.remotes:
             pipe.send(('render', mode))
         imgs = [pipe.recv() for pipe in self.remotes]
-        imgs = flatten_list(imgs)
         return imgs
 
     def get_avail_actions(self):
@@ -193,7 +191,6 @@ class SubprocVecEnv_StarCraft2(VecEnv):
         for remote in self.remotes:
             remote.send(('get_avail_actions', None))
         avail_actions = [remote.recv() for remote in self.remotes]
-        avail_actions = flatten_list(avail_actions)
         return np.array(avail_actions)
 
     def _assert_not_closed(self):

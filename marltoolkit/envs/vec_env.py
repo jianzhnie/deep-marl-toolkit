@@ -1,14 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import (Any, Dict, Iterable, List, Optional, Sequence, Tuple, Type,
-                    Union)
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import cloudpickle
-import gymnasium
 import numpy as np
 from gymnasium import spaces
-from stable_baselines3.common.vec_env import VecEnvWrapper
-
-from ..utils.util import tile_images
 
 
 class VecEnv(ABC):
@@ -33,7 +28,6 @@ class VecEnv(ABC):
         self,
         num_envs: int,
         observation_space: spaces.Space,
-        share_observation_space: spaces.Space,
         action_space: spaces.Space,
     ):
         """Initialize the vectorized environment.
@@ -45,7 +39,6 @@ class VecEnv(ABC):
         """
         self.num_envs = num_envs
         self.observation_space = observation_space
-        self.share_observation_space = share_observation_space
         self.action_space = action_space
         # store info returned by the reset method
         self.reset_infos: List[Dict[str, Any]] = [{} for _ in range(num_envs)]
@@ -135,31 +128,7 @@ class VecEnv(ABC):
 
         :param mode: the rendering type
         """
-        # mode == self.render_mode == "human"
-        # In that case, we try to call `self.env.render()` but it might
-        # crash for subprocesses
-        if mode == 'rgb_array' or mode == 'human':
-            # call the render method of the environments
-            images = self.get_images()
-            # Create a big image by tiling images from subprocesses
-            bigimg = tile_images(images)  # type: ignore[arg-type]
-
-            if mode == 'human':
-                # Display it using OpenCV
-                import cv2
-
-                cv2.imshow('vecenv', bigimg[:, :, ::-1])
-                cv2.waitKey(1)
-            else:
-                return bigimg
-
-        else:
-            # Other render modes:
-            # In that case, we try to call `self.env.render()` but it might
-            # crash for subprocesses
-            # and we don't return the values
-            self.env_method('render')
-        return None
+        raise NotImplementedError()
 
     def get_images(self) -> List[np.ndarray]:
         """Return RGB images from each environment.
@@ -167,7 +136,7 @@ class VecEnv(ABC):
         Returns:
             List[np.ndarray]: List of RGB images.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abstractmethod
     def close_extras(self) -> None:
@@ -175,7 +144,7 @@ class VecEnv(ABC):
 
         Only runs when not self.closed.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def close(self) -> None:
         """Close the vectorized environment.
@@ -206,60 +175,6 @@ class VecEnv(ABC):
 
         self._seeds = [seed + idx for idx in range(self.num_envs)]
         return self._seeds
-
-    @abstractmethod
-    def env_method(self,
-                   method_name: str,
-                   *method_args,
-                   indices: Union[None, int, Iterable[int]] = None,
-                   **method_kwargs) -> List[Any]:
-        """Call instance methods of vectorized environments.
-
-        :param method_name: The name of the environment method to invoke.
-        :param indices: Indices of envs whose method to call
-        :param method_args: Any positional arguments to provide in the call
-        :param method_kwargs: Any keyword arguments to provide in the call
-        :return: List of items returned by the environment's method call
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def env_is_wrapped(
-        self,
-        wrapper_class: Type[gymnasium.Wrapper],
-        indices: Union[None, int, Iterable[int]] = None,
-    ) -> List[bool]:
-        """Check if environments are wrapped with a given wrapper.
-
-        :param method_name: The name of the environment method to invoke.
-        :param indices: Indices of envs whose method to call
-        :param method_args: Any positional arguments to provide in the call
-        :param method_kwargs: Any keyword arguments to provide in the call
-        :return: True if the env is wrapped, False otherwise, for each env queried.
-        """
-        raise NotImplementedError()
-
-    @property
-    def unwrapped(self) -> 'VecEnv':
-        if isinstance(self, VecEnvWrapper):
-            return self.venv.unwrapped
-        else:
-            return self
-
-    def _get_indices(
-            self,
-            indices: Union[None, int, Iterable[int]] = None) -> Iterable[int]:
-        """Convert a flexibly-typed reference to environment indices to an
-        implied list of indices.
-
-        :param indices: refers to indices of envs.
-        :return: the implied list of indices.
-        """
-        if indices is None:
-            indices = range(self.num_envs)
-        elif isinstance(indices, int):
-            indices = [indices]
-        return indices
 
 
 class CloudpickleWrapper:
