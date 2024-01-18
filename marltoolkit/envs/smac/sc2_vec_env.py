@@ -11,9 +11,11 @@ from marltoolkit.utils.util import combined_shape, flatten_list
 from ..multiagentenv import MultiAgentEnv
 
 
-def worker(remote: mp.connection.Connection = None,
-           parent_remote: mp.connection.Connection = None,
-           env_fn_wrappers: CloudpickleWrapper = None) -> None:
+def worker(
+    remote: mp.connection.Connection = None,
+    parent_remote: mp.connection.Connection = None,
+    env_fn_wrappers: CloudpickleWrapper = None,
+) -> None:
 
     def step_env(env: MultiAgentEnv, actions: Union[np.ndarray, List[Any]]):
         obs, state, reward_n, terminated, truncated, info = env.step(actions)
@@ -136,8 +138,9 @@ class SubprocVecEnvSC2(VecEnv):
         results = [remote.recv() for remote in self.remotes]
         results = flatten_list(results)
         state, obs, obs_concate, infos = zip(*results)
-        self.buf_state, self.buf_obs, self.buf_info = np.array(
-            state), np.array(obs), list(infos)
+        self.buf_state, self.buf_obs, self.buf_info = (np.array(state),
+                                                       np.array(obs),
+                                                       list(infos))
         return self.buf_obs.copy(), self.buf_state.copy(), self.buf_info.copy()
 
     def step_async(self, actions: Union[np.ndarray, List[Any]]):
@@ -157,15 +160,21 @@ class SubprocVecEnvSC2(VecEnv):
                 if not env_done:
                     result = remote.recv()
                     state, obs, obs_concate, reward, terminal, truncated, infos = result
-                    self.buf_obs[idx_env], self.buf_state[idx_env] = np.array(
-                        obs), np.array(state)
-                    self.buf_reward[idx_env], self.buf_terminal[
-                        idx_env] = np.array(reward), np.array(terminal)
-                    self.buf_truncation[idx_env], self.buf_info[
-                        idx_env] = np.array(truncated), infos
+                    self.buf_obs[idx_env], self.buf_state[idx_env] = (
+                        np.array(obs),
+                        np.array(state),
+                    )
+                    self.buf_reward[idx_env], self.buf_terminal[idx_env] = (
+                        np.array(reward),
+                        np.array(terminal),
+                    )
+                    self.buf_truncation[idx_env], self.buf_info[idx_env] = (
+                        np.array(truncated),
+                        infos,
+                    )
 
-                    if self.buf_terminal[idx_env].all(
-                    ) or self.buf_truncation[idx_env].all():
+                    if (self.buf_terminal[idx_env].all()
+                            or self.buf_truncation[idx_env].all()):
                         self.buf_done[idx_env] = True
                         self.battles_game[idx_env] += 1
                         if infos['battle_won']:
@@ -175,13 +184,20 @@ class SubprocVecEnvSC2(VecEnv):
                             'dead_enemies']
                 else:
                     self.buf_terminal[idx_env,
-                                      0], self.buf_truncation[idx_env,
-                                                              0] = False, False
+                                      0], self.buf_truncation[idx_env, 0] = (
+                                          False,
+                                          False,
+                                      )
 
         self.waiting = False
-        return self.buf_obs.copy(), self.buf_state.copy(
-        ), self.buf_reward.copy(), self.buf_terminal.copy(
-        ), self.buf_truncation.copy(), self.buf_info.copy()
+        return (
+            self.buf_obs.copy(),
+            self.buf_state.copy(),
+            self.buf_reward.copy(),
+            self.buf_terminal.copy(),
+            self.buf_truncation.copy(),
+            self.buf_info.copy(),
+        )
 
     def close_extras(self):
         if self.closed:
@@ -210,7 +226,8 @@ class SubprocVecEnvSC2(VecEnv):
         return np.array(avail_actions)
 
     def _assert_not_closed(self):
-        assert not self.closed, 'Trying to operate on a SubprocVecEnv after calling close()'
+        assert (not self.closed
+                ), 'Trying to operate on a SubprocVecEnv after calling close()'
 
     def __del__(self):
         if not self.closed:
