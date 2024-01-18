@@ -107,13 +107,8 @@ class SC2Env:
         ]
         return np.array(actions_one_hot)
 
-    def get_available_actions(self) -> np.ndarray:
-        """Get available actions for each agent."""
-        available_actions = [
-            self.env.get_avail_agent_actions(agent_id)
-            for agent_id in range(self.n_agents)
-        ]
-        return np.array(available_actions)
+    def get_available_actions(self):
+        return self.env.get_avail_actions()
 
     def close(self):
         """Close the environment."""

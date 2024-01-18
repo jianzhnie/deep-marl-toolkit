@@ -2,7 +2,7 @@
 baselines3/stable_baselines3/common/vec_env/base_vec_env.py code to work with
 multi-agent envs."""
 
-from typing import Sequence
+from typing import List, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -34,3 +34,65 @@ def tile_images(
     out_image = out_image.reshape(
         (new_height * height, new_width * width, n_channels))
     return out_image
+
+
+def combined_shape(
+        length: int,
+        shape: Union[None, int, Tuple[int, ...]] = None) -> Tuple[int, ...]:
+    """Expand the original shape.
+
+    Parameters:
+    - length (int): The length of the first dimension to expand.
+    - shape (Union[None, int, Tuple[int, ...]]): The target shape to be expanded.
+
+    Returns:
+    - Tuple[int, ...]: A new shape that is expanded from the original shape.
+
+    Examples:
+    --------
+    >>> length = 2
+    >>> shape_1 = None
+    >>> shape_2 = 3
+    >>> shape_3 = (4, 5)
+    >>> combined_shape(length, shape_1)
+    (2,)
+    >>> combined_shape(length, shape_2)
+    (2, 3)
+    >>> combined_shape(length, shape_3)
+    (2, 4, 5)
+    """
+    if shape is None:
+        return (length, )
+    return (length, shape) if np.isscalar(shape) else (length, *shape)
+
+
+def flatten_list(lst: Union[List, Tuple]) -> List:
+    """Flatten a list of lists or tuples.
+
+    Parameters:
+    - lst (Union[List, Tuple]): The input list or tuple containing nested lists or tuples.
+
+    Returns:
+    - List: A flattened list containing all elements from the input.
+
+    Raises:
+    - AssertionError: If the input is not a list or tuple, has length <= 0, or contains sublists/tuples with length <= 0.
+
+    Examples:
+    --------
+    >>> lst1 = [[1, 2, 3], [4, 5], [6]]
+    >>> flatten_list(lst1)
+    [1, 2, 3, 4, 5, 6]
+
+    >>> lst2 = [(1, 2), (3, 4), (5, 6)]
+    >>> flatten_list(lst2)
+    [1, 2, 3, 4, 5, 6]
+    """
+    # Check input conditions
+    assert isinstance(lst, (list, tuple)), 'Input must be a list or tuple'
+    assert len(lst) > 0, 'Input must have length > 0'
+    assert all(len(sub_lst) > 0
+               for sub_lst in lst), 'Sublists/tuples must have length > 0'
+
+    # Flatten the list
+    return [item for sublist in lst for item in sublist]
