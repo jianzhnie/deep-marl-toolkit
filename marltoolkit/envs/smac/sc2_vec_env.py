@@ -141,7 +141,7 @@ class SubprocVecEnvSC2(VecEnv):
         self.buf_state, self.buf_obs, self.buf_info = (np.array(state),
                                                        np.array(obs),
                                                        list(infos))
-        return self.buf_obs.copy(), self.buf_state.copy(), self.buf_info.copy()
+        return self.buf_state.copy(), self.buf_obs.copy(), self.buf_info.copy()
 
     def step_async(self, actions: Union[np.ndarray, List[Any]]):
         self._assert_not_closed()

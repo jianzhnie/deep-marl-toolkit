@@ -396,13 +396,6 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
                 (self.buffer_size, self.episode_limit) + self.state_space,
                 dtype=np.float32)
 
-    def store(self, step_data: Dict[str, np.ndarray]) -> None:
-        for k in self.buffer_keys:
-            assert k in step_data.keys(), f'{k} not in step_data'
-            self.buffers[k][self.curr_ptr] = step_data[k]
-        self.curr_ptr = (self.curr_ptr + 1) % self.buffer_size
-        self.curr_size = min(self.curr_size + 1, self.buffer_size)
-
     def store_episodes(self):
         for env_idx in range(self.num_envs):
             for k in self.buffer_keys:
@@ -415,6 +408,16 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
 
     def store_transitions(self, transitions: Dict[str, np.ndarray]):
         self.episode_data.store_transitions(transitions)
+
+    def finish_path(self, env_idx: int, epi_step: int, *terminal_data):
+        next_state, next_obs, available_actions, filled = terminal_data
+        self.episode_data.episode_buffer['state'][
+            env_idx, epi_step] = next_state[env_idx]
+        self.episode_data.episode_buffer['obs'][env_idx, :,
+                                                epi_step] = next_obs[env_idx]
+        self.episode_data.episode_buffer['available_actions'][
+            env_idx, :, epi_step] = available_actions[env_idx]
+        self.episode_data.episode_buffer['filled'][env_idx] = filled[env_idx]
 
     def sample(self,
                batch_size: int = 32,
