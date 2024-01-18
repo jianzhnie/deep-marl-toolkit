@@ -4,7 +4,8 @@ import numpy as np
 import torch
 
 
-class EpisodeData(object):
+class EpisodeData:
+    """Class for managing and storing episode data."""
 
     def __init__(
         self,
@@ -14,7 +15,15 @@ class EpisodeData(object):
         num_actions: int,
         num_agents: int,
     ):
+        """Initialize EpisodeData.
 
+        Parameters:
+        - episode_limit (int): Maximum number of steps in an episode.
+        - state_shape (Union[int, Tuple]): Shape of the state.
+        - obs_shape (Union[int, Tuple]): Shape of the observation.
+        - num_actions (int): Number of possible actions.
+        - num_agents (int): Number of agents.
+        """
         self.obs_buf = np.zeros((episode_limit, num_agents, obs_shape))
         self.state_buf = np.zeros((episode_limit, state_shape))
         self.action_buf = np.zeros((episode_limit, num_agents))
@@ -27,8 +36,8 @@ class EpisodeData(object):
         self.filled_buf = np.zeros((episode_limit, 1))
 
         # memory management
-        self._curr_ptr = 0
-        self._curr_size = 0
+        self.curr_ptr = 0
+        self.curr_size = 0
         self.episode_limit = episode_limit
 
     def add(
@@ -41,30 +50,47 @@ class EpisodeData(object):
         rewards: np.ndarray,
         terminated: np.ndarray,
         filled: np.ndarray,
-    ):
+    ) -> None:
+        """Add a step of data to the episode.
+
+        Parameters:
+        - state (np.ndarray): State data.
+        - obs (np.ndarray): Observation data.
+        - actions (np.ndarray): Actions taken.
+        - actions_onehot (np.ndarray): Actions in one-hot encoding.
+        - available_actions (np.ndarray): Available actions for each agent.
+        - rewards (np.ndarray): Reward received.
+        - terminated (np.ndarray): Termination flag.
+        - filled (np.ndarray): Filled flag.
+        """
         assert self.size() < self.episode_limit
-        self.obs_buf[self._curr_ptr] = obs
-        self.state_buf[self._curr_ptr] = state
-        self.action_buf[self._curr_ptr] = actions
-        self.action_onehot_buf[self._curr_ptr] = actions_onehot
+        self.obs_buf[self.curr_ptr] = obs
+        self.state_buf[self.curr_ptr] = state
+        self.action_buf[self.curr_ptr] = actions
+        self.action_onehot_buf[self.curr_ptr] = actions_onehot
 
-        self.available_action_buf[self._curr_ptr] = available_actions
+        self.available_action_buf[self.curr_ptr] = available_actions
 
-        self.reward_buf[self._curr_ptr] = rewards
-        self.terminal_buf[self._curr_ptr] = terminated
-        self.filled_buf[self._curr_ptr] = filled
-        self._curr_ptr += 1
-        self._curr_size = min(self._curr_size + 1, self.episode_limit)
+        self.reward_buf[self.curr_ptr] = rewards
+        self.terminal_buf[self.curr_ptr] = terminated
+        self.filled_buf[self.curr_ptr] = filled
+        self.curr_ptr += 1
+        self.curr_size = min(self.curr_size + 1, self.episode_limit)
 
     def fill_mask(self) -> None:
+        """Fill the mask for the current step."""
         assert self.size() < self.episode_limit
-        self.terminal_buf[self._curr_ptr] = True
-        self.filled_buf[self._curr_ptr] = 1.0
-        self._curr_ptr += 1
-        self._curr_size = min(self._curr_size + 1, self.episode_limit)
+        self.terminal_buf[self.curr_ptr] = True
+        self.filled_buf[self.curr_ptr] = 1.0
+        self.curr_ptr += 1
+        self.curr_size = min(self.curr_size + 1, self.episode_limit)
 
     def get_data(self) -> Dict[str, np.ndarray]:
-        """Get all the data in an episode."""
+        """Get all the data in an episode.
+
+        Returns:
+        - Dict[str, np.ndarray]: Episode data dictionary.
+        """
         assert self.size() == self.episode_limit
         episode_data = dict(
             state=self.state_buf,
@@ -78,14 +104,24 @@ class EpisodeData(object):
         return episode_data
 
     def size(self) -> int:
-        """get current size of replay memory."""
-        return self._curr_size
+        """Get current size of replay memory.
 
-    def __len__(self):
-        return self._curr_size
+        Returns:
+        - int: Current size of the replay memory.
+        """
+        return self.curr_size
+
+    def __len__(self) -> int:
+        """Get the length of the EpisodeData.
+
+        Returns:
+        - int: Length of the EpisodeData.
+        """
+        return self.curr_size
 
 
-class MaReplayBuffer(object):
+class MaReplayBuffer:
+    """Multi-agent replay buffer for storing and sampling episode data."""
 
     def __init__(self,
                  buffer_size: int,
@@ -96,7 +132,18 @@ class MaReplayBuffer(object):
                  num_actions: int,
                  dtype: torch.dtype = torch.float32,
                  device: str = 'cpu'):
+        """Initialize MaReplayBuffer.
 
+        Parameters:
+        - buffer_size (int): Maximum number of episodes to store in the buffer.
+        - episode_limit (int): Maximum number of steps in an episode.
+        - state_shape (Union[int, Tuple]): Shape of the state.
+        - obs_shape (Union[int, Tuple]): Shape of the observation.
+        - num_agents (int): Number of agents.
+        - num_actions (int): Number of possible actions.
+        - dtype (torch.dtype): Data type for PyTorch tensors.
+        - device (str): Device for PyTorch tensors ('cpu' or 'cuda').
+        """
         self.obs_buf = np.zeros(
             (buffer_size, episode_limit, num_agents, obs_shape))
         self.state_buf = np.zeros((buffer_size, episode_limit, state_shape))
@@ -120,8 +167,8 @@ class MaReplayBuffer(object):
         self.device = device
 
         # memory management
-        self._curr_ptr = 0
-        self._curr_size = 0
+        self.curr_ptr = 0
+        self.curr_size = 0
 
     def store(
         self,
@@ -133,66 +180,83 @@ class MaReplayBuffer(object):
         rewards: np.ndarray,
         terminated: np.ndarray,
         filled: np.ndarray,
-    ):
+    ) -> None:
+        """Store a step of data in the replay buffer.
 
-        self.obs_buf[self._curr_ptr] = obs
-        self.state_buf[self._curr_ptr] = state
-        self.action_buf[self._curr_ptr] = actions
-        self.action_onehot_buf[self._curr_ptr] = actions_onehot
-        self.available_action_buf[self._curr_ptr] = available_actions
+        Parameters:
+        - obs (np.ndarray): Observation data.
+        - state (np.ndarray): State data.
+        - actions (np.ndarray): Actions taken.
+        - actions_onehot (np.ndarray): Actions in one-hot encoding.
+        - available_actions (np.ndarray): Available actions for each agent.
+        - rewards (np.ndarray): Reward received.
+        - terminated (np.ndarray): Termination flag.
+        - filled (np.ndarray): Filled flag.
+        """
+        self.obs_buf[self.curr_ptr] = obs
+        self.state_buf[self.curr_ptr] = state
+        self.action_buf[self.curr_ptr] = actions
+        self.action_onehot_buf[self.curr_ptr] = actions_onehot
+        self.available_action_buf[self.curr_ptr] = available_actions
 
-        self.reward_buf[self._curr_ptr] = rewards
-        self.terminal_buf[self._curr_ptr] = terminated
-        self.filled_buf[self._curr_ptr] = filled
+        self.reward_buf[self.curr_ptr] = rewards
+        self.terminal_buf[self.curr_ptr] = terminated
+        self.filled_buf[self.curr_ptr] = filled
 
-        self._curr_ptr = (self._curr_ptr + 1) % self.buffer_size
-        self._curr_size = min(self._curr_size + 1, self.buffer_size)
+        self.curr_ptr = (self.curr_ptr + 1) % self.buffer_size
+        self.curr_size = min(self.curr_size + 1, self.buffer_size)
 
     def to_torch(self, array: np.ndarray, copy: bool = True) -> torch.Tensor:
-        """
-        Convert a numpy array to a PyTorch tensor.
-        Note: it copies the data by default
+        """Convert a numpy array to a PyTorch tensor.
 
-        :param array:
-        :param copy: Whether to copy or not the data
-            (may be useful to avoid changing things be reference)
-        :return:
-        """
-        if copy:
-            return torch.tensor(array).to(self.device)
-        return torch.as_tensor(array).to(self.device)
-
-    def sample_batch(self, batch_size) -> Dict[str, np.ndarray]:
-        """sample a batch from replay memory.
-
-        Args:
-            batch_size (int): batch size
+        Parameters:
+        - array (np.ndarray): Numpy array to be converted.
+        - copy (bool): Whether to copy the data.
 
         Returns:
-            a batch of experience samples: obs, action, reward, next_obs, terminal
+        - torch.Tensor: PyTorch tensor.
         """
-        idxs = np.random.randint(self._curr_size, size=batch_size)
+        if copy:
+            return torch.tensor(array, dtype=self.dtype, device=self.device)
+        return torch.as_tensor(array, dtype=self.dtype, device=self.device)
+
+    def sample_batch(self, batch_size: int) -> Dict[str, torch.Tensor]:
+        """Sample a batch from the replay buffer.
+
+        Parameters:
+        - batch_size (int): Batch size.
+
+        Returns:
+        - Dict[str, torch.Tensor]: Batch of experience samples.
+        """
+        idxs = np.random.randint(self.curr_size, size=batch_size)
 
         batch = dict(
-            state_batch=self.state_buf[idxs],
-            obs_batch=self.obs_buf[idxs],
-            actions_batch=self.action_buf[idxs],
-            actions_onehot_batch=self.action_onehot_buf[idxs],
-            available_actions_batch=self.available_action_buf[idxs],
-            reward_batch=self.reward_buf[idxs],
-            terminated_batch=self.terminal_buf[idxs],
-            filled_batch=self.filled_buf[idxs],
+            state_batch=self.to_torch(self.state_buf[idxs]),
+            obs_batch=self.to_torch(self.obs_buf[idxs]),
+            actions_batch=self.to_torch(self.action_buf[idxs]),
+            actions_onehot_batch=self.to_torch(self.action_onehot_buf[idxs]),
+            available_actions_batch=self.to_torch(
+                self.available_action_buf[idxs]),
+            reward_batch=self.to_torch(self.reward_buf[idxs]),
+            terminated_batch=self.to_torch(self.terminal_buf[idxs]),
+            filled_batch=self.to_torch(self.filled_buf[idxs]),
         )
-        batch = {
-            key: torch.tensor(val, dtype=self.dtype, device=self.device)
-            for (key, val) in batch.items()
-        }
 
         return batch
 
     def size(self) -> int:
-        """get current size of replay memory."""
-        return self._curr_size
+        """Get current size of replay memory.
 
-    def __len__(self):
-        return self._curr_size
+        Returns:
+        - int: Current size of the replay memory.
+        """
+        return self.curr_size
+
+    def __len__(self) -> int:
+        """Get the length of the MaReplayBuffer.
+
+        Returns:
+        - int: Length of the MaReplayBuffer.
+        """
+        return self.curr_size

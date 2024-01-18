@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Tuple, Union
 
 import numpy as np
 import torch
@@ -161,10 +161,12 @@ class MaEpisodeData(object):
             rewards=np.zeros(
                 (self.num_envs, self.episode_limit) + self.reward_space,
                 dtype=np.float32),
-            terminated=np.zeros((self.num_envs, self.episode_limit) +
-                                self.done_space).astype(np.bool),
-            filled=np.zeros((self.num_envs, self.episode_limit) +
-                            self.done_space).astype(np.bool),
+            terminated=np.zeros(
+                (self.num_envs, self.episode_limit) + self.done_space,
+                dtype=bool),
+            filled=np.zeros(
+                (self.num_envs, self.episode_limit) + self.done_space,
+                dtype=bool),
         )
         if self.store_global_state:
             self.episode_buffer['state'] = np.zeros(
@@ -269,15 +271,18 @@ class OffPolicyBuffer(BaseBuffer):
                 (self.num_envs, self.buffer_size, self.num_agents) +
                 self.action_space,
                 dtype=np.int8),
-            agent_mask=np.zeros((self.num_envs, self.buffer_size,
-                                 self.num_agents)).astype(np.bool),
+            agent_mask=np.zeros(
+                (self.num_envs, self.buffer_size, self.num_agents),
+                dtype=bool),
             rewards=np.zeros(
                 (self.num_envs, self.buffer_size) + self.reward_space,
                 dtype=np.float32),
-            terminated=np.zeros((self.num_envs, self.buffer_size) +
-                                self.done_space).astype(np.bool),
-            filled=np.zeros((self.num_envs, self.buffer_size) +
-                            self.done_space).astype(np.bool),
+            terminated=np.zeros(
+                (self.num_envs, self.buffer_size) + self.done_space,
+                dtype=bool),
+            filled=np.zeros(
+                (self.num_envs, self.buffer_size) + self.done_space,
+                dtype=bool),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
@@ -379,9 +384,9 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
             rewards=np.zeros(
                 (self.episode_limit) + self.reward_space, dtype=np.float32),
             terminated=np.zeros(
-                (self.episode_limit) + self.done_space, dtype=np.bool),
+                (self.episode_limit) + self.done_space, dtype=bool),
             filled=np.zeros(
-                (self.episode_limit) + self.done_space, dtype=np.bool),
+                (self.episode_limit) + self.done_space, dtype=bool),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
@@ -428,106 +433,6 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
         batch = {key: self.buffers[key][step_idxs] for key in self.buffer_keys}
         if to_torch:
             batch = self.to_torch(batch)
-        return batch
-
-    def size(self) -> int:
-        """get current size of replay memory."""
-        return self.curr_size
-
-    def __len__(self):
-        return self.curr_size
-
-
-class IndependReplayBuffer(object):
-
-    def __init__(
-        self,
-        obs_dim: Union[int, Tuple],
-        num_agents: int,
-        buffer_size: int,
-    ):
-
-        self.obs_buf = np.zeros((buffer_size, num_agents, obs_dim),
-                                dtype=np.float32)
-        self.next_obs_buf = np.zeros((buffer_size, num_agents, obs_dim),
-                                     dtype=np.float32)
-        self.action_buf = np.zeros((buffer_size, num_agents), dtype=np.float32)
-        self.reward_buf = np.zeros((buffer_size, num_agents), dtype=np.float32)
-        self.terminal_buf = np.zeros((buffer_size, num_agents),
-                                     dtype=np.float32)
-
-        self.curr_ptr = 0
-        self.curr_size = 0
-        self.obs_dim = obs_dim
-        self.num_agents = num_agents
-        self.buffer_size = buffer_size
-
-    def store(self, obs_all: List, act_all: List, reward_all: List,
-              next_obs_all: List, terminal_all: List):
-        agent_idx = 0
-        for transition in zip(obs_all, act_all, reward_all, next_obs_all,
-                              terminal_all):
-            obs, act, reward, next_obs, terminal = transition
-
-            self.obs_buf[self.curr_ptr, agent_idx] = obs
-            self.next_obs_buf[self.curr_ptr, agent_idx] = next_obs
-            self.action_buf[self.curr_ptr, agent_idx] = act
-            self.reward_buf[self.curr_ptr, agent_idx] = reward
-            self.terminal_buf[self.curr_ptr, agent_idx] = terminal
-
-            agent_idx += 1
-
-        self.curr_ptr = (self.curr_ptr + 1) % self.buffer_size
-        self.curr_size = min(self.curr_size + 1, self.buffer_size)
-
-    def sample_batch(self, batch_size: int) -> Dict[str, np.ndarray]:
-        idxs = np.random.randint(self.curr_size, size=batch_size)
-
-        batch = dict(
-            obs=self.obs_buf[idxs],
-            next_obs=self.next_obs_buf[idxs],
-            action=self.action_buf[idxs],
-            reward=self.reward_buf[idxs],
-            terminal=self.terminal_buf[idxs],
-            indices=idxs,  # for N -step Learning
-        )
-
-        return batch
-
-    def sample_chunk(self, chunk_size: int,
-                     batch_size: int) -> Dict[str, np.ndarray]:
-
-        start_idx = np.random.randint(
-            self.curr_size - chunk_size, size=batch_size)
-
-        obs_chunk, next_obs_chunk, action_chunk, reward_chunk, terminal_chunk = [], [], [], [], []
-
-        for idx in start_idx:
-            obs = self.obs_buf[idx:idx + chunk_size]
-            next_obs = self.next_obs_buf[idx:idx + chunk_size]
-            action = self.action_buf[idx:idx + chunk_size]
-            reward = self.reward_buf[idx:idx + chunk_size]
-            terminal = self.terminal_buf[idx:idx + chunk_size]
-
-            obs_chunk.append(obs)
-            next_obs_chunk.append(next_obs)
-            action_chunk.append(action)
-            reward_chunk.append(reward)
-            terminal_chunk.append(terminal)
-
-        obs_chunk = np.stack(obs_chunk, axis=0)
-        next_obs_chunk = np.stack(next_obs_chunk, axis=0)
-        action_chunk = np.stack(action_chunk, axis=0)
-        reward_chunk = np.stack(reward_chunk, axis=0)
-        terminal_chunk = np.stack(terminal_chunk, axis=0)
-
-        batch = dict(
-            obs=obs_chunk,
-            next_obs=next_obs_chunk,
-            action=action_chunk,
-            reward=reward_chunk,
-            terminal=terminal_chunk)
-
         return batch
 
     def size(self) -> int:
