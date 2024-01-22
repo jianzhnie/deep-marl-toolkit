@@ -1,8 +1,15 @@
+import warnings
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Union
 
 import numpy as np
 import torch
+
+try:
+    # Check memory used by replay buffer when possible
+    import psutil
+except ImportError:
+    psutil = None
 
 
 class BaseBuffer(ABC):
@@ -224,7 +231,7 @@ class OffPolicyBuffer(BaseBuffer):
         device: Union[torch.device, str] = 'cpu',
         **kwargs,
     ):
-        super(OffPolicyBuffer, self).__init__(
+        super().__init__(
             num_envs,
             buffer_size,
             num_agents,
@@ -242,12 +249,31 @@ class OffPolicyBuffer(BaseBuffer):
             self.store_global_state = True
         else:
             self.store_global_state = False
+
+        # Check that the replay buffer can fit into the memory
+        if psutil is not None:
+            mem_available = psutil.virtual_memory().available
+
         self.buffers = {}
         self.reset()
         self.buffer_keys = self.buffers.keys()
         # memory management
         self.curr_ptr = 0
         self.curr_size = 0
+
+        if psutil is not None:
+            total_memory_usage: float = 0
+            for k in self.buffer_keys:
+                total_memory_usage += self.buffers[k].nbytes
+
+            if total_memory_usage > mem_available:
+                # Convert to GB
+                total_memory_usage /= 1e9
+                mem_available /= 1e9
+                warnings.warn(
+                    'This system does not have apparently enough memory to store the complete '
+                    f'replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB'
+                )
 
     def reset(self) -> None:
         self.buffers = dict(
