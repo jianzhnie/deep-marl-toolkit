@@ -138,7 +138,6 @@ class VecEnv(ABC):
         """
         raise NotImplementedError()
 
-    @abstractmethod
     def close_extras(self) -> None:
         """Clean up the extra resources, beyond what's in this base class.
 
