@@ -41,8 +41,9 @@ def worker(
 ) -> None:
 
     def step_env(env: MultiAgentEnv, actions: Union[np.ndarray, List[Any]]):
-        obs, state, reward_n, terminated, truncated, info = env.step(actions)
-        return obs, state, reward_n, terminated, truncated, info
+        state, obs, reward_n, available_actions, terminated, truncated, info = env.step(
+            actions)
+        return state, obs, available_actions, reward_n, terminated, truncated, info
 
     parent_remote.close()
     envs: List[MultiAgentEnv] = [
@@ -66,7 +67,8 @@ def worker(
                 break
             elif cmd == 'get_env_info':
                 remote.send(
-                    CloudpickleWrapper((envs[0].env_info, envs[0].n_enemies)))
+                    CloudpickleWrapper(
+                        (envs[0].env_info, envs[0].num_enemies)))
             else:
                 raise NotImplementedError(
                     f'`{cmd}` is not implemented in the worker')
@@ -160,7 +162,7 @@ class SubprocVecEnvSC2(VecEnv):
             remote.send(('reset', None))
         results = [remote.recv() for remote in self.remotes]
         results = flatten_list(results)
-        state, obs, obs_concate, infos = zip(*results)
+        state, obs, available_actions, infos = zip(*results)
         self.buf_state, self.buf_obs, self.buf_info = (np.array(state),
                                                        np.array(obs),
                                                        list(infos))
@@ -182,7 +184,7 @@ class SubprocVecEnvSC2(VecEnv):
                     range(self.num_envs), self.buf_done, self.remotes):
                 if not env_done:
                     result = remote.recv()
-                    state, obs, obs_concate, reward, terminal, truncated, infos = result
+                    state, obs, available_actions, reward, terminal, truncated, infos = result
                     self.buf_obs[idx_env], self.buf_state[idx_env] = (
                         np.array(obs),
                         np.array(state),

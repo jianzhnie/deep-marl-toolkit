@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import gymnasium
 import numpy as np
 
+from .smac.smac_vec_env import clear_mpi_env_vars
 from .vec_env import CloudpickleWrapper, VecEnv
 
 
@@ -21,6 +22,7 @@ def worker(
             if cmd == 'step':
                 state, obs, available_actions, reward, terminated, truncated, info = env.step(
                     data)
+                print(info)
                 # convert to SB3 VecEnv api
                 done = terminated or truncated
                 info['truncated'] = truncated and not terminated
@@ -85,6 +87,7 @@ class SubprocVecEnv(VecEnv):
         self.waiting = False
         self.closed = False
         self.num_envs = len(env_fns)
+        print('Num envs:', self.num_envs)
 
         if start_method is None:
             # Fork is not a thread safe method (see issue #217)
@@ -102,10 +105,12 @@ class SubprocVecEnv(VecEnv):
             args = (work_remote, remote, CloudpickleWrapper(env_fn))
             # daemon=True: if the main process crashes, we should not cause things to hang
             process = ctx.Process(target=worker, args=args, daemon=True)
-            process.start()
+            with clear_mpi_env_vars():
+                process.start()
             self.processes.append(process)
             work_remote.close()
 
+        print('Processes', self.processes)
         self.remotes[0].send(('get_spaces', None))
         self.num_agents = self.remotes[0].recv()
         obs_space, action_space = self.remotes[0].recv()
