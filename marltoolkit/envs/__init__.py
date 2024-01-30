@@ -1,6 +1,6 @@
 from .dummy_vec_env import DummyVecEnv
 from .multiagentenv import MultiAgentEnv
-from .smac import SMACEnv, SubprocVecEnvSC2
+from .smac import SMACEnv, SubprocVecSMAC
 from .smacv2 import SMACv2Env
 from .subproc_vec_env import SubprocVecEnv
 from .vec_env import VecEnv
@@ -9,5 +9,5 @@ from .vec_env import VecEnv
 
 __all__ = [
     'SMACEnv', 'SubprocVecEnv', 'DummyVecEnv', 'VecEnv', 'MultiAgentEnv',
-    'SubprocVecEnvSC2', 'SMACv2Env'
+    'SubprocVecSMAC', 'SMACv2Env'
 ]

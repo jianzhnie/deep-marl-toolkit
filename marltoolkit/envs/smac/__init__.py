@@ -1,4 +1,4 @@
 from .smac_env import SMACEnv
-from .smac_vec_env import SubprocVecEnvSC2
+from .smac_vec_env import SubprocVecSMAC
 
-__all__ = ['SMACEnv', 'SubprocVecEnvSC2']
+__all__ = ['SMACEnv', 'SubprocVecSMAC']

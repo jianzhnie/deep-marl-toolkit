@@ -40,9 +40,8 @@ def worker(
 ) -> None:
 
     def step_env(env: MultiAgentEnv, actions: Union[np.ndarray, List[Any]]):
-        state, obs, available_actions, reward, terminated, truncated, info = env.step(
-            actions)
-        return state, obs, available_actions, reward, terminated, truncated, info
+        state, obs, reward, terminated, truncated, info = env.step(actions)
+        return state, obs, reward, terminated, truncated, info
 
     parent_remote.close()
     envs: List[MultiAgentEnv] = [
@@ -78,7 +77,7 @@ def worker(
                 env.close()
 
 
-class SubprocVecEnvSC2(VecEnv):
+class SubprocVecSMAC(VecEnv):
     """VecEnv that runs multiple environments in parallel in subproceses and
     communicates with them via pipes.
 
@@ -161,7 +160,7 @@ class SubprocVecEnvSC2(VecEnv):
             remote.send(('reset', None))
         results = [remote.recv() for remote in self.remotes]
         results = flatten_list(results)
-        state, obs, available_actions, infos = zip(*results)
+        state, obs, infos = zip(*results)
         self.buf_state, self.buf_obs, self.buf_info = (np.array(state),
                                                        np.array(obs),
                                                        list(infos))
@@ -183,7 +182,7 @@ class SubprocVecEnvSC2(VecEnv):
                     range(self.num_envs), self.buf_done, self.remotes):
                 if not env_done:
                     result = remote.recv()
-                    state, obs, available_actions, reward, terminal, truncated, infos = result
+                    state, obs, reward, terminal, truncated, infos = result
                     self.buf_obs[idx_env], self.buf_state[idx_env] = (
                         np.array(obs),
                         np.array(state),

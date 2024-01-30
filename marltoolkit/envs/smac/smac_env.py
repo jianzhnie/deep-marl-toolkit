@@ -133,22 +133,13 @@ class SMACEnv(object):
         - Tuple: Tuple containing state, observation, concatenated observation, and info.
         """
         obs_smac, state_smac = self.env.reset()
-
-        available_actions = self.env.get_avail_actions()
-
-        # last_actions_one_hot = np.zeros((self.num_agents, self.n_actions),
-        #                                 dtype='float32')
-        # agents_id_one_hot = self._get_agents_id_one_hot()
-        # obs_concate = np.concatenate(
-        #     [obs_smac, last_actions_one_hot, agents_id_one_hot], axis=-1)
-
         self._episode_step = 0
         self._episode_score = 0.0
         info = {
             'episode_step': self._episode_step,
             'episode_score': self._episode_score,
         }
-        return state_smac, obs_smac, available_actions, info
+        return state_smac, obs_smac, info
 
     def step(self, actions: Union[np.ndarray, List[int]]) -> Tuple:
         """Take a step in the environment.
@@ -167,9 +158,6 @@ class SMACEnv(object):
         obs_smac = self.env.get_obs()
         state_smac = self.env.get_state()
         reward_n = np.array([[reward] for _ in range(self.num_agents)])
-        available_actions = self.env.get_avail_actions()
-
-        # last_actions_one_hot = self._get_actions_one_hot(actions)
 
         self._episode_step += 1
         self._episode_score += reward
@@ -178,12 +166,7 @@ class SMACEnv(object):
         info['episode_score'] = self._episode_score
 
         truncated = True if self._episode_step >= self.episode_limit else False
-        # obs_concate = np.concatenate(
-        #     [obs_smac, last_actions_one_hot, self.agents_id_one_hot], axis=-1)
-
-        return state_smac, obs_smac, available_actions, reward_n, [
-            terminated
-        ], [truncated], info
+        return state_smac, obs_smac, reward_n, [terminated], [truncated], info
 
     def get_env_info(self):
         """Get the environment information."""
