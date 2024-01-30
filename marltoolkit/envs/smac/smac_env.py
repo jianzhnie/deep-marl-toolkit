@@ -30,7 +30,6 @@ class SMACEnv(object):
         # Number of agents and enemies
         self.num_agents = self.env.n_agents
         self.num_enemies = self.env.n_enemies
-        self.agents = ['agent_{}'.format(i) for i in range(self.num_agents)]
 
         # Number of actions
         self.action_shape = self.env_info['n_actions']
@@ -65,7 +64,6 @@ class SMACEnv(object):
 
         # Initialize agent IDs one-hot encoding
         self._init_agents_id_one_hot(self.num_agents)
-
         # Buffer information
         self.buf_info = {
             'battle_won': 0,
@@ -134,9 +132,8 @@ class SMACEnv(object):
         Returns:
         - Tuple: Tuple containing state, observation, concatenated observation, and info.
         """
-        self.env.reset()
-        obs_smac = self.env.get_obs()
-        state_smac = self.env.get_state()
+        obs_smac, state_smac = self.env.reset()
+
         available_actions = self.env.get_avail_actions()
 
         # last_actions_one_hot = np.zeros((self.num_agents, self.n_actions),

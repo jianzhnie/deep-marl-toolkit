@@ -23,15 +23,15 @@ def worker(
                 state, obs, available_actions, reward, terminated, truncated, info = env.step(
                     data)
                 print(info)
-                # convert to SB3 VecEnv api
-                done = terminated or truncated
-                info['truncated'] = truncated and not terminated
-                if done:
-                    # save final obs where user can get it, then reset
-                    info['obs'] = obs
-                    state, obs, available_actions, reset_info = env.reset()
-                remote.send((state, obs, available_actions, reward, done, info,
-                             reset_info))
+                # # convert to SB3 VecEnv api
+                # done = terminated or truncated
+                # info['truncated'] = truncated and not terminated
+                # if done:
+                #     # save final obs where user can get it, then reset
+                #     info['obs'] = obs
+                #     state, obs, available_actions, reset_info = env.reset()
+                remote.send((state, obs, available_actions, reward, terminated,
+                             info, reset_info))
             elif cmd == 'reset':
                 state, obs, available_actions, reset_info = env.reset()
                 remote.send((state, obs, available_actions, reset_info))
@@ -105,10 +105,12 @@ class SubprocVecEnv(VecEnv):
             args = (work_remote, remote, CloudpickleWrapper(env_fn))
             # daemon=True: if the main process crashes, we should not cause things to hang
             process = ctx.Process(target=worker, args=args, daemon=True)
+            self.processes.append(process)
+        for process in self.processes:
             with clear_mpi_env_vars():
                 process.start()
-            self.processes.append(process)
-            work_remote.close()
+        for remote in self.work_remotes:
+            remote.close()
 
         print('Processes', self.processes)
         self.remotes[0].send(('get_spaces', None))
@@ -135,15 +137,12 @@ class SubprocVecEnv(VecEnv):
     def reset(
         self
     ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
-        for env_idx, remote in enumerate(self.remotes):
-            remote.send(
-                ('reset', (self._seeds[env_idx], self._options[env_idx])))
+        for remote in self.remotes:
+            remote.send(('reset', None))
         results = [remote.recv() for remote in self.remotes]
-        state, obs, self.reset_infos = zip(*results)
-        # Seeds and options are only used once
-        self._reset_seeds()
-        self._reset_options()
-        return np.stack(state), np.stack(obs), np.stack(self.reset_infos)
+        state, obs, available_actions, self.reset_infos = zip(*results)
+        return np.stack(state), np.stack(obs), np.stack(
+            available_actions), np.stack(self.reset_infos)
 
     def close(self) -> None:
         if self.closed:

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import cloudpickle
 import numpy as np
@@ -40,22 +40,7 @@ class VecEnv(ABC):
         self.num_envs = num_envs
         self.observation_space = observation_space
         self.action_space = action_space
-        # store info returned by the reset method
-        self.reset_infos: List[Dict[str, Any]] = [{} for _ in range(num_envs)]
-        # seeds to be used in the next call to env.reset()
-        self._seeds: List[Optional[int]] = [None for _ in range(num_envs)]
-        # options to be used in the next call to env.reset()
-        self._options: List[Dict[str, Any]] = [{} for _ in range(num_envs)]
         self.closed = False
-        self.render_mode = None
-
-    def _reset_seeds(self) -> None:
-        """Reset the seeds that are going to be used at the next reset."""
-        self._seeds = [None for _ in range(self.num_envs)]
-
-    def _reset_options(self) -> None:
-        """Reset the options that are going to be used at the next reset."""
-        self._options = [{} for _ in range(self.num_envs)]
 
     @abstractmethod
     def reset(self) -> Union[np.ndarray, Dict[str, np.ndarray]]:
@@ -68,7 +53,7 @@ class VecEnv(ABC):
         Returns:
             Union[np.ndarray, Dict[str, np.ndarray]]: Observations after reset.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abstractmethod
     def step_async(self, actions: Union[np.ndarray, List[Any]]) -> None:
@@ -81,7 +66,7 @@ class VecEnv(ABC):
         Args:
             actions: Actions to take in each environment.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abstractmethod
     def step_wait(
@@ -101,7 +86,7 @@ class VecEnv(ABC):
                 - dones: "Episode done" booleans for each environment.
                 - infos: A list of info objects for each environment.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def step(
         self, actions: Union[np.ndarray, List[Any]]
@@ -136,14 +121,14 @@ class VecEnv(ABC):
         Returns:
             List[np.ndarray]: List of RGB images.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def close_extras(self) -> None:
         """Clean up the extra resources, beyond what's in this base class.
 
         Only runs when not self.closed.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def close(self) -> None:
         """Close the vectorized environment.
@@ -154,26 +139,6 @@ class VecEnv(ABC):
             return
         self.close_extras()
         self.closed = True
-
-    def seed(self, seed: Optional[int] = None) -> Sequence[Union[None, int]]:
-        """
-        Sets the random seeds for all environments, based on a given seed.
-        Each individual environment will still get its own seed, by incrementing the given seed.
-        WARNING: since gym 0.26, those seeds will only be passed to the environment
-        at the next reset.
-
-        :param seed: The random seed. May be None for completely random seeding.
-        :return: Returns a list containing the seeds for each individual env.
-            Note that all list elements may be None, if the env does not return anything when being seeded.
-        """
-        if seed is None:
-            # To ensure that subprocesses have different seeds,
-            # we still populate the seed variable when no argument is passed
-            seed = int(
-                np.random.randint(0, np.iinfo(np.uint32).max, dtype=np.uint32))
-
-        self._seeds = [seed + idx for idx in range(self.num_envs)]
-        return self._seeds
 
 
 class CloudpickleWrapper:

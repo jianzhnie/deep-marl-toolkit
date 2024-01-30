@@ -6,10 +6,9 @@ from typing import Any, Callable, List, Optional, Union
 import numpy as np
 from gymnasium.spaces import Box, Discrete
 
+from marltoolkit.envs.multiagentenv import MultiAgentEnv
 from marltoolkit.envs.vec_env import CloudpickleWrapper, VecEnv
 from marltoolkit.utils.util import combined_shape, flatten_list
-
-from ..multiagentenv import MultiAgentEnv
 
 
 @contextlib.contextmanager
@@ -41,9 +40,9 @@ def worker(
 ) -> None:
 
     def step_env(env: MultiAgentEnv, actions: Union[np.ndarray, List[Any]]):
-        state, obs, reward_n, available_actions, terminated, truncated, info = env.step(
+        state, obs, available_actions, reward, terminated, truncated, info = env.step(
             actions)
-        return state, obs, available_actions, reward_n, terminated, truncated, info
+        return state, obs, available_actions, reward, terminated, truncated, info
 
     parent_remote.close()
     envs: List[MultiAgentEnv] = [
