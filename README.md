@@ -111,21 +111,3 @@ Here is a chart describing the characteristics of each algorithm:
 *IQL* is the multi-agent version of Q learning.
 *MAA2C* and *MATRPO* are the centralized version of A2C and TRPO.
 *VDPPO* is the value decomposition version of PPO.
-
-**Current Task & Available algorithm mapping**: Y for available, N for not suitable, P for partially available on some scenarios.
-(Note: in our code, independent algorithms may not have **I** as prefix. For instance, PPO = IPPO)
-
-| Env w Algorithm | IQL | PG  | A2C | DDPG | TRPO | PPO | COMA | MADDPG | MAAC | MATRPO | MAPPO | HATRPO | HAPPO | VDN | QMIX | FACMAC | VDAC | VDPPO |
-| --------------- | --- | --- | --- | ---- | ---- | --- | ---- | ------ | ---- | ------ | ----- | ------ | ----- | --- | ---- | ------ | ---- | ----- |
-| LBF             | Y   | Y   | Y   | N    | Y    | Y   | Y    | N      | Y    | Y      | Y     | Y      | Y     | P   | P    | P      | P    | P     |
-| RWARE           | Y   | Y   | Y   | N    | Y    | Y   | Y    | N      | Y    | Y      | Y     | Y      | Y     | Y   | Y    | Y      | Y    | Y     |
-| MPE             | P   | Y   | Y   | P    | Y    | Y   | P    | P      | Y    | Y      | Y     | Y      | Y     | Y   | Y    | Y      | Y    | Y     |
-| SMAC            | Y   | Y   | Y   | N    | Y    | Y   | Y    | N      | Y    | Y      | Y     | Y      | Y     | Y   | Y    | Y      | Y    | Y     |
-| MetaDrive       | N   | Y   | Y   | Y    | Y    | Y   | N    | N      | N    | N      | N     | N      | N     | N   | N    | N      | N    | N     |
-| MAgent          | Y   | Y   | Y   | N    | Y    | Y   | Y    | N      | Y    | Y      | Y     | Y      | Y     | N   | N    | N      | N    | N     |
-| Pommerman       | Y   | Y   | Y   | N    | Y    | Y   | P    | N      | Y    | Y      | Y     | Y      | Y     | P   | P    | P      | P    | P     |
-| MaMujoco        | N   | Y   | Y   | Y    | Y    | Y   | N    | Y      | Y    | Y      | Y     | Y      | Y     | N   | N    | Y      | Y    | Y     |
-| GRF             | Y   | Y   | Y   | N    | Y    | Y   | Y    | N      | Y    | Y      | Y     | Y      | Y     | Y   | Y    | Y      | Y    | Y     |
-| Hanabi          | Y   | Y   | Y   | N    | Y    | Y   | Y    | N      | Y    | Y      | Y     | Y      | Y     | N   | N    | N      | N    | N     |
-
-You can find a comprehensive list of existing MARL algorithms in different environments  [here](docs/awesome_marl.md).
