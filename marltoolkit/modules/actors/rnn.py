@@ -12,10 +12,12 @@ import torch.nn.functional as F
 
 class RNNModel(nn.Module):
 
-    def __init__(self,
-                 input_shape: int = None,
-                 n_actions: int = None,
-                 rnn_hidden_dim: int = 64):
+    def __init__(
+        self,
+        input_shape: int = None,
+        rnn_hidden_dim: int = 64,
+        n_actions: int = None,
+    ):
         super(RNNModel, self).__init__()
         self.rnn_hidden_dim = rnn_hidden_dim
 
@@ -38,5 +40,5 @@ class RNNModel(nn.Module):
         q = self.fc2(h)  # (batch_size, n_actions)
         return q, h
 
-    def update(self, model):
+    def update(self, model: nn.Module):
         self.load_state_dict(model.state_dict())

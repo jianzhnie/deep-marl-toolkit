@@ -11,9 +11,26 @@ def get_common_args():
         help='The project which env is in')
     parser.add_argument(
         '--scenario', type=str, default='3m', help='the map of the game')
+    parser.add_argument(
+        '--difficulty',
+        type=str,
+        default='7',
+        help='Difficulty of the environment.')
     parser.add_argument('--seed', type=int, default=123, help='random seed')
     parser.add_argument(
         '--total_steps', type=int, default=1000000, help='total episode')
+    parser.add_argument(
+        '--replay_buffer_size',
+        type=int,
+        default=5000,
+        help='Max number of episodes stored in the replay buffer.')
+    parser.add_argument(
+        '--memory_warmup_size',
+        type=int,
+        default=32,
+        help="Learning start until replay_buffer_size >= 'memory_warmup_size'")
+    parser.add_argument(
+        '--batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument(
         '--log_dir',
         type=str,
@@ -25,6 +42,21 @@ def get_common_args():
         type=str,
         default='wandb',
         help='the logger for the experiment')
+    parser.add_argument(
+        '--train_log_interval',
+        type=int,
+        default=5,
+        help='Log interval(Eposide) for training')
+    parser.add_argument(
+        '--test_log_interval',
+        type=int,
+        default=20,
+        help='Log interval for testing.')
+    parser.add_argument(
+        '--test_steps',
+        type=int,
+        default=100,
+        help="Evaluate the model every 'test_steps' steps.")
     parser.add_argument(
         '--load_model',
         type=bool,

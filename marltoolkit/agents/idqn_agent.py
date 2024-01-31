@@ -23,23 +23,25 @@ class IDQNAgent(QMixAgent):
         clip_grad_norm (None, or float): clipped value of gradients' global norm.
     """
 
-    def __init__(self,
-                 agent_model: nn.Module = None,
-                 mixer_model: nn.Module = None,
-                 n_agents: int = None,
-                 double_q: bool = True,
-                 total_steps: int = 1e6,
-                 gamma: float = 0.99,
-                 learning_rate: float = 0.0005,
-                 min_learning_rate: float = 0.0001,
-                 exploration_start: float = 1.0,
-                 min_exploration: float = 0.01,
-                 update_target_interval: int = 100,
-                 update_learner_freq: int = 1,
-                 clip_grad_norm: float = 10,
-                 optim_alpha: float = 0.99,
-                 optim_eps: float = 0.00001,
-                 device: str = 'cpu'):
+    def __init__(
+        self,
+        agent_model: nn.Module = None,
+        mixer_model: nn.Module = None,
+        n_agents: int = None,
+        double_q: bool = True,
+        total_steps: int = 1e6,
+        gamma: float = 0.99,
+        learning_rate: float = 0.0005,
+        min_learning_rate: float = 0.0001,
+        exploration_start: float = 1.0,
+        min_exploration: float = 0.01,
+        update_target_interval: int = 100,
+        update_learner_freq: int = 1,
+        clip_grad_norm: float = 10,
+        optim_alpha: float = 0.99,
+        optim_eps: float = 0.00001,
+        device: str = 'cpu',
+    ):
 
         check_model_method(agent_model, 'init_hidden', self.__class__.__name__)
         check_model_method(agent_model, 'forward', self.__class__.__name__)

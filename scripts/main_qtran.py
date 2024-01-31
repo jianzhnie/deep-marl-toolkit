@@ -82,8 +82,9 @@ def main():
 
     agent_model = RNNModel(
         input_shape=config['obs_shape'],
+        rnn_hidden_dim=config['rnn_hidden_dim'],
         n_actions=config['n_actions'],
-        rnn_hidden_dim=config['rnn_hidden_dim'])
+    )
     mixer_model = QTransModel(
         n_agents=config['n_agents'],
         n_actions=config['n_actions'],

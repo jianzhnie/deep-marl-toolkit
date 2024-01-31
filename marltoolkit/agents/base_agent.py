@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 class BaseAgent(ABC):
 
     @abstractmethod
+    def reset_agent():
+        raise NotImplementedError
+
+    @abstractmethod
     def sample(self):
         raise NotImplementedError
 
