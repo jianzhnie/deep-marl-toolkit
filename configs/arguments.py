@@ -11,7 +11,7 @@ def get_common_args():
         help='The project which env is in',
     )
     parser.add_argument(
-        '--scenario', type=str, default='2m_vs_1z', help='the map of the game')
+        '--scenario', type=str, default='3m', help='the map of the game')
     parser.add_argument(
         '--difficulty',
         type=str,
