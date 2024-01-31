@@ -4,8 +4,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import gymnasium
 import numpy as np
 
-from .smac.smac_vec_env import clear_mpi_env_vars
-from .vec_env import CloudpickleWrapper, VecEnv
+from marltoolkit.envs.base_vec_env import BaseVecEnv, CloudpickleWrapper
+from marltoolkit.envs.smacv1 import clear_mpi_env_vars
 
 
 def worker(
@@ -53,7 +53,7 @@ def worker(
             break
 
 
-class SubprocVecEnv(VecEnv):
+class SubprocVecEnv(BaseVecEnv):
     """Creates a multiprocess vectorized wrapper for multiple environments,
     distributing each environment to its own process, allowing significant
     speed up when the environment is computationally complex.

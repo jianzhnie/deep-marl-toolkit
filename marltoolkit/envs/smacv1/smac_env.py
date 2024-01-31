@@ -18,13 +18,14 @@ from marltoolkit.utils.transforms import OneHotTransform
 class SMACEnv(object):
     """Wrapper for StarCraft2Env providing a more user-friendly interface."""
 
-    def __init__(self, map_name: str = '3m'):
+    def __init__(self, map_name):
         """Initialize the SC2Env.
 
         Parameters:
         - map_name (str): Name of the map for the StarCraft2 environment.
         """
         self.env = StarCraft2Env(map_name=map_name)
+        print(self.env)
         self.env_info = self.env.get_env_info()
 
         # Number of agents and enemies

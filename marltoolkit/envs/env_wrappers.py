@@ -4,9 +4,10 @@ from multiprocessing import Pipe, Process
 from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
-from utils.util import tile_images
 
-from .vec_env import CloudpickleWrapper, VecEnvWrapper
+from marltoolkit.utils.util import tile_images
+
+from .base_vec_env import CloudpickleWrapper
 
 
 class ShareVecEnv(ABC):
@@ -147,30 +148,6 @@ class ShareVecEnv(ABC):
             List[np.ndarray]: List of RGB images.
         """
         raise NotImplementedError
-
-    @property
-    def unwrapped(self) -> Any:
-        """Return the unwrapped environment.
-
-        Returns:
-            Any: Unwrapped environment.
-        """
-        if isinstance(self, VecEnvWrapper):
-            return self.venv.unwrapped
-        else:
-            return self
-
-    def get_viewer(self) -> Any:
-        """Get the viewer for rendering.
-
-        Returns:
-            Any: Viewer object.
-        """
-        if self.viewer is None:
-            from gym.envs.classic_control import rendering
-
-            self.viewer = rendering.SimpleImageViewer()
-        return self.viewer
 
 
 def worker(remote, parent_remote, env_fn_wrapper):

@@ -6,8 +6,8 @@ from typing import Any, Callable, List, Optional, Union
 import numpy as np
 from gymnasium.spaces import Box, Discrete
 
+from marltoolkit.envs.base_vec_env import BaseVecEnv, CloudpickleWrapper
 from marltoolkit.envs.multiagentenv import MultiAgentEnv
-from marltoolkit.envs.vec_env import CloudpickleWrapper, VecEnv
 from marltoolkit.utils.util import combined_shape, flatten_list
 
 
@@ -77,7 +77,7 @@ def worker(
                 env.close()
 
 
-class SubprocVecSMAC(VecEnv):
+class SubprocVecSMAC(BaseVecEnv):
     """VecEnv that runs multiple environments in parallel in subproceses and
     communicates with them via pipes.
 

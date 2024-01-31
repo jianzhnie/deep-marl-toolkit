@@ -9,10 +9,10 @@ import numpy as np
 from stable_baselines3.common.vec_env.util import (copy_obs_dict, dict_to_obs,
                                                    obs_space_info)
 
-from .vec_env import VecEnv
+from .base_vec_env import BaseVecEnv
 
 
-class DummyVecEnv(VecEnv):
+class DummyVecEnv(BaseVecEnv):
     """Creates a simple vectorized wrapper for multiple environments, calling
     each environment in sequence on the current Python process. This is useful
     for computationally simple environment such as ``Cartpole-v1``, as the
@@ -182,7 +182,7 @@ class DummyVecEnv(VecEnv):
         return [self.envs[i] for i in indices]
 
 
-class ShareDummyVecEnv(VecEnv):
+class ShareDummyVecEnv(BaseVecEnv):
 
     def __init__(self, env_fns: List[Callable[[], gym.Env]]):
         self.envs = [fn() for fn in env_fns]
@@ -212,7 +212,7 @@ class ShareDummyVecEnv(VecEnv):
             env.close()
 
 
-class ChooseDummyVecEnv(VecEnv):
+class ChooseDummyVecEnv(BaseVecEnv):
 
     def __init__(self, env_fns: List[Callable[[], gym.Env]]):
         self.envs = [fn() for fn in env_fns]

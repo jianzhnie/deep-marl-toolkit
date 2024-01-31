@@ -6,7 +6,7 @@ import numpy as np
 from gymnasium import spaces
 
 
-class VecEnv(ABC):
+class BaseVecEnv(ABC):
     """Abstract base class for vectorized environments.
 
     This class defines the interface for interacting with a vectorized environment,
