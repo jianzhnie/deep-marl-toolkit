@@ -4,7 +4,6 @@ LastEditors: jianzhnie
 Description: RLToolKit is a flexible and high-efficient reinforcement learning framework.
 Copyright (c) 2022 by jianzhnie@126.com, All Rights Reserved.
 '''
-from copy import deepcopy
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -12,7 +11,6 @@ from gymnasium.spaces import Box, Dict, Discrete
 from smac.env import StarCraft2Env
 
 from marltoolkit.envs.multiagentenv import MARLBaseEnv
-from marltoolkit.utils.transforms import OneHotTransform
 
 
 class SMACEnv(object):
@@ -25,7 +23,6 @@ class SMACEnv(object):
         - map_name (str): Name of the map for the StarCraft2 environment.
         """
         self.env = StarCraft2Env(map_name=map_name)
-        print(self.env)
         self.env_info = self.env.get_env_info()
 
         # Number of agents and enemies
@@ -56,15 +53,6 @@ class SMACEnv(object):
         # Max episode steps
         self.episode_limit = self.env_info['episode_limit']
 
-        # Observation concatenation shape
-        self.obs_concate_shape = self.obs_shape + self.num_agents + self.n_actions
-
-        # One-hot transformations
-        self.agent_id_one_hot_transform = OneHotTransform(self.num_agents)
-        self.actions_one_hot_transform = OneHotTransform(self.n_actions)
-
-        # Initialize agent IDs one-hot encoding
-        self._init_agents_id_one_hot(self.num_agents)
         # Buffer information
         self.buf_info = {
             'battle_won': 0,
@@ -81,37 +69,6 @@ class SMACEnv(object):
         """Check if the win is counted."""
         return self.env.win_counted
 
-    def _init_agents_id_one_hot(self, num_agents: int):
-        """Initialize the one-hot encoding for agent IDs.
-
-        Parameters:
-        - num_agents (int): Number of agents.
-        """
-        agents_id_one_hot = [
-            self.agent_id_one_hot_transform(agent_id)
-            for agent_id in range(num_agents)
-        ]
-        self.agents_id_one_hot = np.array(agents_id_one_hot)
-
-    def _get_agents_id_one_hot(self) -> np.ndarray:
-        """Get the one-hot encoding for agent IDs."""
-        return deepcopy(self.agents_id_one_hot)
-
-    def _get_actions_one_hot(
-            self, actions: Union[np.ndarray, List[int]]) -> np.ndarray:
-        """Get the one-hot encoding for a list of actions.
-
-        Parameters:
-        - actions (Union[np.ndarray, List[int]]): List of actions.
-
-        Returns:
-        - np.ndarray: One-hot encoding of actions.
-        """
-        actions_one_hot = [
-            self.actions_one_hot_transform(action) for action in actions
-        ]
-        return np.array(actions_one_hot)
-
     def get_available_actions(self):
         return self.env.get_avail_actions()
 
@@ -127,7 +84,7 @@ class SMACEnv(object):
         """
         return self.env.render(mode)
 
-    def reset(self) -> Tuple:
+    def reset(self):
         """Reset the environment.
 
         Returns:
@@ -185,8 +142,6 @@ class SMACEnv(object):
 class RLlibSMAC(MARLBaseEnv):
 
     def __init__(self, map_name):
-        map_name = map_name if isinstance(map_name,
-                                          str) else map_name['map_name']
         self.env = StarCraft2Env(map_name)
 
         env_info = self.env.get_env_info()
