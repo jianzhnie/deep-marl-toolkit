@@ -16,12 +16,14 @@ class QMixerModel(nn.Module):
     output: a scalar (Q)
     '''
 
-    def __init__(self,
-                 n_agents: int = None,
-                 state_shape: int = None,
-                 mixing_embed_dim: int = 32,
-                 hypernet_layers: int = 2,
-                 hypernet_embed_dim: int = 64):
+    def __init__(
+        self,
+        n_agents: int = None,
+        state_shape: int = None,
+        mixing_embed_dim: int = 32,
+        hypernet_layers: int = 2,
+        hypernet_embed_dim: int = 64,
+    ):
         super(QMixerModel, self).__init__()
 
         self.n_agents = n_agents
@@ -47,7 +49,7 @@ class QMixerModel(nn.Module):
             nn.Linear(self.state_shape, self.embed_dim), nn.ReLU(inplace=True),
             nn.Linear(self.embed_dim, 1))
 
-    def forward(self, agent_qs, states):
+    def forward(self, agent_qs: torch.Tensor, states: torch.Tensor):
         '''
         Args:
             agent_qs (torch.Tensor): (batch_size, T, n_agents)

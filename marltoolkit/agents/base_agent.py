@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 class BaseAgent(ABC):
 
     @abstractmethod
-    def reset_agent():
+    def reset_agent(self):
         raise NotImplementedError
 
     @abstractmethod
