@@ -3,9 +3,9 @@ import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from gymnasium import Space
 
-from marltoolkit.utils import check_model_method
+from marltoolkit.modules.actors.mlp import MLPActorModel
+from marltoolkit.modules.critics.mlp import MLPCriticModel
 
 from .base_agent import BaseAgent
 
@@ -28,45 +28,44 @@ class MaddpgAgent(BaseAgent):
         self,
         actor_model: nn.Module,
         critic_model: nn.Module,
-        agent_index: int = None,
-        action_space: Space = None,
-        gamma: float = None,
-        tau: float = None,
-        actor_lr: float = None,
-        critic_lr: float = None,
-        device: str = None,
+        n_agents: int = None,
+        obs_shape: int = None,
+        n_actions: int = None,
+        gamma: float = 0.95,
+        tau: float = 0.01,
+        actor_lr: float = 0.01,
+        critic_lr: float = 0.01,
+        device: str = 'cpu',
     ):
 
         # checks
-        check_model_method(actor_model, 'policy', self.__class__.__name__)
-        check_model_method(critic_model, 'value', self.__class__.__name__)
-
-        assert isinstance(agent_index, int)
-        assert isinstance(action_space, Space)
         assert isinstance(gamma, float)
         assert isinstance(tau, float)
         assert isinstance(actor_lr, float)
         assert isinstance(critic_lr, float)
 
-        self.continuous_actions = False
-        if not len(action_space) == 0 and hasattr(action_space[0], 'high') \
-                and not hasattr(action_space[0], 'num_discrete_space'):
-            self.continuous_actions = True
-
-        self.agent_index = agent_index
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
         self.global_steps = 0
         self.device = device
 
-        self.actor_model = actor_model
-        self.critic_model = critic_model
+        self.actor_model = [
+            MLPActorModel(obs_shape, n_actions) for _ in range(n_agents)
+        ]
+        self.critic_model = [
+            MLPCriticModel(n_agents, obs_shape, n_actions)
+            for _ in range(n_agents)
+        ]
         self.actor_target = copy.deepcopy(actor_model)
         self.critic_target = copy.deepcopy(critic_model)
-        self.actor_optimizer = torch.optim.Adam(
-            lr=self.actor_lr, params=self.actor_model.parameters)
-        self.critic_optimizer = torch.optim.Adam(
-            lr=self.critic_lr, params=self.critic_model.parameters)
+        self.actor_optimizer = [
+            torch.optim.Adam(model.parameters(), lr=self.actor_lr)
+            for model in self.actor_model
+        ]
+        self.critic_optimizer = [
+            torch.optim.Adam(model.parameters(), lr=self.critic_lr)
+            for model in self.critic_model
+        ]
 
     def sample(self, obs, use_target_model=False):
         """use the policy model to sample actions.

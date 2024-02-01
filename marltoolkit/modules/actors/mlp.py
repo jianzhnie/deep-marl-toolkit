@@ -9,32 +9,20 @@ def weights_init_(module: nn.Module):
         nn.init.constant_(module.bias, 0)
 
 
-class ActorModel(nn.Module):
+class MLPActorModel(nn.Module):
 
-    def __init__(
-        self,
-        obs_dim: int,
-        act_dim: int,
-        hidden_size: int = 64,
-        continuous_actions: bool = False,
-    ):
-        super(ActorModel, self).__init__()
-        self.continuous_actions = continuous_actions
+    def __init__(self, obs_shape: int, n_actions: int, hidden_size: int = 64):
+        super(MLPActorModel, self).__init__()
 
-        self.fc1 = nn.Linear(obs_dim, hidden_size)
+        self.fc1 = nn.Linear(obs_shape, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, act_dim)
+        self.fc3 = nn.Linear(hidden_size, n_actions)
         self.relu1 = nn.ReLU(inplace=True)
         self.relu2 = nn.ReLU(inplace=True)
-        if self.continuous_actions:
-            std_hid_size = hidden_size
-            self.std_fc = nn.Linear(std_hid_size, act_dim)
+        self.apply(weights_init_)
 
     def forward(self, obs: torch.Tensor):
         hid1 = self.relu1(self.fc1(obs))
         hid2 = self.relu2(self.fc2(hid1))
-        means = self.fc3(hid2)
-        if self.continuous_actions:
-            act_std = self.std_fc(hid2)
-            return (means, act_std)
-        return means
+        policy = self.fc3(hid2)
+        return policy
