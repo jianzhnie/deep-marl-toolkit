@@ -10,24 +10,30 @@ def weights_init_(module: nn.Module):
         nn.init.constant_(module.bias, 0)
 
 
-class CriticModel(nn.Module):
+class MLPCritic(nn.Module):
 
     def __init__(
         self,
-        critic_in_dim: int,
-        hidden_size: int = 64,
-        out_dim: int = 1,
+        input_dim: int = None,
+        hidden_dim: int = 64,
+        output_dim: int = 1,
     ):
-        super(CriticModel, self).__init__()
-        self.fc1 = nn.Linear(critic_in_dim, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, out_dim)
+        super(MLPCritic, self).__init__()
+
+        # Set up network layers
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, output_dim)
         self.apply(weights_init_)
 
-    def forward(self, obs_n: torch.Tensor, act_n: torch.Tensor):
-        inputs = torch.cat(obs_n + act_n, dim=1)
-        hid1 = F.relu(self.fc1(inputs))
-        hid2 = F.relu(self.fc2(hid1))
-        q_value = self.fc3(hid2)
-        q_value = torch.squeeze(q_value, dim=1)
-        return q_value
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        '''
+        Args:
+            inputs (torch.Tensor):   (batch_size, T, input_shape)
+        Returns:
+            q_total (torch.Tensor):  (batch_size, T, 1)
+        '''
+        x = F.relu(self.fc1(inputs))
+        x = F.relu(self.fc2(x))
+        q = self.fc3(x)
+        return q
