@@ -15,7 +15,7 @@ class QattenMixer(nn.Module):
                  n_key_embedding_layer1: int = 32,
                  n_head_embedding_layer1: int = 64,
                  n_head_embedding_layer2: int = 4,
-                 n_attention_head: int = 4,
+                 num_attention_heads: int = 4,
                  n_constrant_value: int = 32):
         super(QattenMixer, self).__init__()
         self.n_agents = n_agents
@@ -27,11 +27,11 @@ class QattenMixer(nn.Module):
         self.n_key_embedding_layer1 = n_key_embedding_layer1
         self.n_head_embedding_layer1 = n_head_embedding_layer1
         self.n_head_embedding_layer2 = n_head_embedding_layer2
-        self.n_attention_head = n_attention_head
+        self.num_attention_heads = num_attention_heads
         self.n_constrant_value = n_constrant_value
 
         self.query_embedding_layers = nn.ModuleList()
-        for i in range(self.n_attention_head):
+        for _ in range(self.num_attention_heads):
             self.query_embedding_layers.append(
                 nn.Sequential(
                     nn.Linear(state_dim, n_query_embedding_layer1),
@@ -40,7 +40,7 @@ class QattenMixer(nn.Module):
                               n_query_embedding_layer2)))
 
         self.key_embedding_layers = nn.ModuleList()
-        for i in range(n_attention_head):
+        for _ in range(num_attention_heads):
             self.key_embedding_layers.append(
                 nn.Linear(self.agent_own_state_size, n_key_embedding_layer1))
 
@@ -71,7 +71,7 @@ class QattenMixer(nn.Module):
         us = self._get_us(states)
 
         q_lambda_list = []
-        for i in range(self.n_attention_head):
+        for i in range(self.num_attention_heads):
             state_embedding = self.query_embedding_layers[i](states)
             u_embedding = self.key_embedding_layers[i](us)
 
@@ -90,19 +90,19 @@ class QattenMixer(nn.Module):
 
             q_lambda_list.append(q_lambda)
 
-        # shape: [batch_size * T, n_attention_head, n_agent]
+        # shape: [batch_size * T, num_attention_heads, n_agent]
         q_lambda_list = torch.stack(q_lambda_list, dim=1).squeeze(-2)
 
-        # shape: [batch_size * T, n_agent, n_attention_head]
+        # shape: [batch_size * T, n_agent, num_attention_heads]
         q_lambda_list = q_lambda_list.permute(0, 2, 1)
 
-        # shape: [batch_size * T, 1, n_attention_head]
+        # shape: [batch_size * T, 1, num_attention_heads]
         q_h = torch.matmul(agent_qs, q_lambda_list)
 
         if self.type == 'weighted':
-            # shape: [batch_size * T, n_attention_head]
+            # shape: [batch_size * T, num_attention_heads]
             w_h = torch.abs(self.head_embedding_layer(states))
-            # shape: [batch_size * T, n_attention_head, 1]
+            # shape: [batch_size * T, num_attention_heads, 1]
             w_h = w_h.reshape(-1, self.n_head_embedding_layer2, 1)
 
             # shape: [batch_size * T, 1,1]

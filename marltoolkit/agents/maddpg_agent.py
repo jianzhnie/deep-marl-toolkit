@@ -56,14 +56,11 @@ class MaddpgAgent(BaseAgent):
         self.agent_index = agent_index
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
-        self.actor_model = actor_model
-        self.critic_model = critic_model
-        self.n_actions = None
-        self.n_agents = None
-        self.input_shape = None
-        self.hidden_dim = None
+        self.global_steps = 0
         self.device = device
 
+        self.actor_model = actor_model
+        self.critic_model = critic_model
         self.actor_target = copy.deepcopy(actor_model)
         self.critic_target = copy.deepcopy(critic_model)
         self.actor_optimizer = torch.optim.Adam(
@@ -82,10 +79,12 @@ class MaddpgAgent(BaseAgent):
             act (torch tensor): action, shape([B] + shape of act_n[agent_index]),
                 noted that in the discrete case we take the argmax along the last axis as action
         """
+        obs = torch.FloatTensor(obs.reshape(1, -1)).to(self.device)
+
         if use_target_model:
-            policy = self.actor_target.policy(obs)
+            policy = self.actor_target(obs)
         else:
-            policy = self.actor_model.policy(obs)
+            policy = self.actor_model(obs)
 
         # add noise for action exploration
         if self.continuous_actions:
@@ -97,6 +96,7 @@ class MaddpgAgent(BaseAgent):
             soft_uniform = torch.log(-1.0 * torch.log(uniform)).to(self.device)
             action = F.softmax(policy - soft_uniform, dim=-1)
 
+        action = action.detach().cpu().numpy().flatten()
         return action
 
     def predict(self, obs: torch.Tensor):
@@ -109,13 +109,15 @@ class MaddpgAgent(BaseAgent):
             act (torch tensor): action, shape([B] + shape of act_n[agent_index]),
                 noted that in the discrete case we take the argmax along the last axis as action
         """
-        obs = torch.FloatTensor(obs).to(self.device)
+        obs = torch.FloatTensor(obs.reshape(1, -1)).to(self.device)
         policy = self.actor_model(obs)
         if self.continuous_actions:
             action = policy[0]
             action = torch.tanh(action)
         else:
             action = torch.argmax(policy, dim=-1)
+
+        action = action.detach().cpu().numpy().flatten()
         return action
 
     def q_value(self, obs_n, act_n, use_target_model=False):
@@ -133,6 +135,10 @@ class MaddpgAgent(BaseAgent):
             return self.critic_target.value(obs_n, act_n)
         else:
             return self.critic_model.value(obs_n, act_n)
+
+    def agent_learn(self, obs_n, act_n, target_q):
+        """update actor and critic model with MADDPG algorithm."""
+        self.global_steps += 1
 
     def learn(self, obs_n, act_n, target_q):
         """update actor and critic model with MADDPG algorithm."""
