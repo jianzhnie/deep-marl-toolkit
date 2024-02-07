@@ -113,7 +113,7 @@ class QMixAgent(BaseAgent):
             self.target_hidden_states = self.target_hidden_states.unsqueeze(
                 0).expand(batch_size, self.n_agents, -1)
 
-    def sample(self, obs, available_actions):
+    def sample(self, obs: torch.Tensor, available_actions: torch.Tensor):
         ''' sample actions via epsilon-greedy
         Args:
             obs (np.ndarray):               (n_agents, obs_shape)
@@ -135,7 +135,7 @@ class QMixAgent(BaseAgent):
         self.exploration = max(self.ep_scheduler.step(), self.min_exploration)
         return actions
 
-    def predict(self, obs, available_actions):
+    def predict(self, obs: torch.Tensor, available_actions: torch.Tensor):
         '''take greedy actions
         Args:
             obs (np.ndarray):               (n_agents, obs_shape)
