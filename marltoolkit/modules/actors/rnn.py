@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class RNNModel(nn.Module):
+class RNNActor(nn.Module):
 
     def __init__(
         self,
@@ -20,7 +20,7 @@ class RNNModel(nn.Module):
         rnn_hidden_dim: int = 64,
         n_actions: int = None,
     ):
-        super(RNNModel, self).__init__()
+        super(RNNActor, self).__init__()
         self.rnn_hidden_dim = rnn_hidden_dim
 
         self.fc1 = nn.Linear(input_shape, rnn_hidden_dim)
@@ -78,11 +78,12 @@ class RNNNSAgent(nn.Module):
         super(RNNNSAgent, self).__init__()
         self.n_agents = n_agents
         self.input_shape = input_shape
-        self.agents: List[RNNModel] = nn.ModuleList([
-            RNNModel(
+        self.agents: List[RNNActor] = nn.ModuleList([
+            RNNActor(
                 input_shape=input_shape,
                 rnn_hidden_dim=rnn_hidden_dim,
-                n_actions=n_actions) for _ in range(self.n_agents)
+                n_actions=n_actions,
+            ) for _ in range(self.n_agents)
         ])
 
     def init_hidden(self):
