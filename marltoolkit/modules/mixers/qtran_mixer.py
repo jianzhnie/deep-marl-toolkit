@@ -35,9 +35,9 @@ class QTransModel(nn.Module):
         # action_encoding 对输入的每个 agent的 hidden_states 和动作进行编码，
         # 从而将所有 agents 的 hidden_states 和动作相加得到近似的联合 hidden_states 和动作
         ae_input = self.rnn_hidden_dim + self.n_actions
-        self.action_encoding = nn.Sequential(
-            nn.Linear(ae_input, ae_input), nn.ReLU(inplace=True),
-            nn.Linear(ae_input, ae_input))
+        self.action_encoding = nn.Sequential(nn.Linear(ae_input, ae_input),
+                                             nn.ReLU(inplace=True),
+                                             nn.Linear(ae_input, ae_input))
 
         # Q(s,u)
         if self.qtran_arch == 'coma_critic':
@@ -200,10 +200,11 @@ class QtranQ(nn.Module):
             nn.Linear(ae_input, ae_input))
 
         q_input = state_dim + n_actions + rnn_hidden_dim
-        self.q = nn.Sequential(
-            nn.Linear(q_input, mixing_embed_dim), nn.ReLU(inplace=True),
-            nn.Linear(mixing_embed_dim, mixing_embed_dim),
-            nn.ReLU(inplace=True), nn.Linear(mixing_embed_dim, 1))
+        self.q = nn.Sequential(nn.Linear(q_input, mixing_embed_dim),
+                               nn.ReLU(inplace=True),
+                               nn.Linear(mixing_embed_dim, mixing_embed_dim),
+                               nn.ReLU(inplace=True),
+                               nn.Linear(mixing_embed_dim, 1))
 
     def forward(self, state, hidden_states, actions):
         '''
@@ -266,10 +267,11 @@ class QtranV(nn.Module):
             nn.Linear(rnn_hidden_dim, rnn_hidden_dim))
 
         v_input = state_dim + rnn_hidden_dim
-        self.v = nn.Sequential(
-            nn.Linear(v_input, mixing_embed_dim), nn.ReLU(inplace=True),
-            nn.Linear(mixing_embed_dim, mixing_embed_dim),
-            nn.ReLU(inplace=True), nn.Linear(mixing_embed_dim, 1))
+        self.v = nn.Sequential(nn.Linear(v_input, mixing_embed_dim),
+                               nn.ReLU(inplace=True),
+                               nn.Linear(mixing_embed_dim, mixing_embed_dim),
+                               nn.ReLU(inplace=True),
+                               nn.Linear(mixing_embed_dim, 1))
 
     def forward(self, state: torch.Tensor,
                 hidden_states: torch.Tensor) -> torch.Tensor:
