@@ -70,8 +70,8 @@ class ACAgent(BaseAgent):
         self.target_agent_model.to(device)
 
         self.agent_params = list(self.agent_model.parameters())
-        self.agent_optimiser = torch.optim.Adam(
-            params=self.agent_params, lr=learning_rate)
+        self.agent_optimiser = torch.optim.Adam(params=self.agent_params,
+                                                lr=learning_rate)
 
         self.critic_model = critic_model
         self.target_critic_model = deepcopy(self.critic_model)
@@ -79,18 +79,17 @@ class ACAgent(BaseAgent):
         self.target_critic_model.to(device)
         self.critic_params = list(self.critic_model.parameters())
 
-        self.critic_optimiser = torch.optim.Adam(
-            params=self.critic_params, lr=learning_rate)
+        self.critic_optimiser = torch.optim.Adam(params=self.critic_params,
+                                                 lr=learning_rate)
 
         self.ep_scheduler = LinearDecayScheduler(exploration_start,
                                                  total_steps * 0.8)
 
         lr_steps = [total_steps * 0.5, total_steps * 0.8]
-        self.lr_scheduler = MultiStepScheduler(
-            start_value=learning_rate,
-            max_steps=total_steps,
-            milestones=lr_steps,
-            decay_factor=0.5)
+        self.lr_scheduler = MultiStepScheduler(start_value=learning_rate,
+                                               max_steps=total_steps,
+                                               milestones=lr_steps,
+                                               decay_factor=0.5)
 
     def reset_agent(self, batch_size=1):
         self._init_hidden_states(batch_size)
@@ -116,8 +115,8 @@ class ACAgent(BaseAgent):
         '''
         epsilon = np.random.random()
         if epsilon < self.exploration:
-            available_actions = torch.tensor(
-                available_actions, dtype=torch.float32)
+            available_actions = torch.tensor(available_actions,
+                                             dtype=torch.float32)
             actions_dist = Categorical(available_actions)
             actions = actions_dist.sample().long().cpu().detach().numpy()
 
@@ -137,8 +136,9 @@ class ACAgent(BaseAgent):
             actions (np.ndarray):           (n_agents, )
         '''
         obs = torch.tensor(obs, dtype=torch.float32, device=self.device)
-        available_actions = torch.tensor(
-            available_actions, dtype=torch.long, device=self.device)
+        available_actions = torch.tensor(available_actions,
+                                         dtype=torch.long,
+                                         device=self.device)
         agents_q, self.hidden_states = self.agent_model(
             obs, self.hidden_states)
         # mask unavailable actions
