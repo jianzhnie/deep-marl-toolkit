@@ -92,15 +92,14 @@ class EpisodeData:
         - Dict[str, np.ndarray]: Episode data dictionary.
         """
         assert self.size() == self.episode_limit
-        episode_data = dict(
-            state=self.state_buf,
-            obs=self.obs_buf,
-            actions=self.action_buf,
-            actions_onehot=self.action_onehot_buf,
-            rewards=self.reward_buf,
-            terminated=self.terminal_buf,
-            available_actions=self.available_action_buf,
-            filled=self.filled_buf)
+        episode_data = dict(state=self.state_buf,
+                            obs=self.obs_buf,
+                            actions=self.action_buf,
+                            actions_onehot=self.action_onehot_buf,
+                            rewards=self.reward_buf,
+                            terminated=self.terminal_buf,
+                            available_actions=self.available_action_buf,
+                            filled=self.filled_buf)
         return episode_data
 
     def size(self) -> int:

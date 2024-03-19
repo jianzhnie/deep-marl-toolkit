@@ -145,10 +145,9 @@ class MaEpisodeData(object):
 
     def reset(self):
         self.episode_buffer = dict(
-            obs=np.zeros(
-                (self.num_envs, self.num_agents, self.episode_limit) +
-                self.obs_space,
-                dtype=np.float32),
+            obs=np.zeros((self.num_envs, self.num_agents, self.episode_limit) +
+                         self.obs_space,
+                         dtype=np.float32),
             obs_next=np.zeros(
                 (self.num_envs, self.num_agents, self.episode_limit) +
                 self.obs_space,
@@ -277,10 +276,9 @@ class OffPolicyBuffer(BaseBuffer):
 
     def reset(self) -> None:
         self.buffers = dict(
-            obs=np.zeros(
-                (self.num_envs, self.buffer_size, self.num_agents) +
-                self.obs_space,
-                dtype=np.float32),
+            obs=np.zeros((self.num_envs, self.buffer_size, self.num_agents) +
+                         self.obs_space,
+                         dtype=np.float32),
             obs_next=np.zeros(
                 (self.num_envs, self.buffer_size, self.num_agents) +
                 self.obs_space,
@@ -407,12 +405,12 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
                 (self.num_agents, self.episode_limit, self.num_agents) +
                 self.action_space,
                 dtype=np.int8),
-            rewards=np.zeros(
-                (self.episode_limit) + self.reward_space, dtype=np.float32),
-            terminated=np.zeros(
-                (self.episode_limit) + self.done_space, dtype=bool),
-            filled=np.zeros(
-                (self.episode_limit) + self.done_space, dtype=bool),
+            rewards=np.zeros((self.episode_limit) + self.reward_space,
+                             dtype=np.float32),
+            terminated=np.zeros((self.episode_limit) + self.done_space,
+                                dtype=bool),
+            filled=np.zeros((self.episode_limit) + self.done_space,
+                            dtype=bool),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
