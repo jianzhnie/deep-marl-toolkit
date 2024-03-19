@@ -1,8 +1,8 @@
 [flake8]
-ignore = E731, E741, W504, W503, E126,E125, E402, E501
-max-line-length = 120
+ignore =
+max-line-length = 79
 show-source = False
-application-import-names = marltoolkit
+application-import-names = rltoolkit
 exclude =
     .git
     docs/
