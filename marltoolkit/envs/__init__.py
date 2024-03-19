@@ -1,13 +1,14 @@
-from .base_vec_env import BaseVecEnv
-from .dummy_vec_env import DummyVecEnv
-from .multiagentenv import MultiAgentEnv
+from .marl_base_env import MARLBaseEnv
 from .smacv1 import SMACEnv, SubprocVecSMAC
 from .smacv2 import SMACv2Env
-from .subproc_vec_env import SubprocVecEnv
-
-# from .wargame_wrapper import GameParams, WarGameSAWrapper
+from .vec_env import BaseVecEnv, DummyVecEnv, SubprocVecEnv
 
 __all__ = [
-    'SMACEnv', 'SubprocVecEnv', 'DummyVecEnv', 'BaseVecEnv', 'MultiAgentEnv',
-    'SubprocVecSMAC', 'SMACv2Env'
+    'SMACEnv',
+    'SubprocVecEnv',
+    'DummyVecEnv',
+    'BaseVecEnv',
+    'MARLBaseEnv',
+    'SubprocVecSMAC',
+    'SMACv2Env',
 ]

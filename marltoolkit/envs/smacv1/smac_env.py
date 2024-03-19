@@ -10,7 +10,7 @@ import numpy as np
 from gymnasium.spaces import Box, Dict, Discrete
 from smac.env import StarCraft2Env
 
-from marltoolkit.envs.multiagentenv import MARLBaseEnv
+from marltoolkit.envs.marl_base_env import MARLBaseEnv
 
 
 class SMACEnv(object):

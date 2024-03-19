@@ -6,8 +6,8 @@ from typing import Any, Callable, List, Optional, Union
 import numpy as np
 from gymnasium.spaces import Box, Discrete
 
-from marltoolkit.envs.base_vec_env import BaseVecEnv, CloudpickleWrapper
-from marltoolkit.envs.multiagentenv import MultiAgentEnv
+from marltoolkit.envs.marl_base_env import MARLBaseEnv
+from marltoolkit.envs.vec_env import BaseVecEnv, CloudpickleWrapper
 from marltoolkit.utils.util import combined_shape, flatten_list
 
 
@@ -39,12 +39,12 @@ def worker(
     env_fn_wrappers: CloudpickleWrapper = None,
 ) -> None:
 
-    def step_env(env: MultiAgentEnv, actions: Union[np.ndarray, List[Any]]):
+    def step_env(env: MARLBaseEnv, actions: Union[np.ndarray, List[Any]]):
         state, obs, reward, terminated, truncated, info = env.step(actions)
         return state, obs, reward, terminated, truncated, info
 
     parent_remote.close()
-    envs: List[MultiAgentEnv] = [
+    envs: List[MARLBaseEnv] = [
         env_fn_wrapper() for env_fn_wrapper in env_fn_wrappers.x
     ]
     while True:
@@ -84,9 +84,11 @@ class SubprocVecSMAC(BaseVecEnv):
     Recommended to use when num_envs > 1 and step() can be a bottleneck.
     """
 
-    def __init__(self,
-                 env_fns: List[Callable[[], MultiAgentEnv]],
-                 start_method: Optional[str] = 'spawn'):
+    def __init__(
+        self,
+        env_fns: List[Callable[[], MARLBaseEnv]],
+        start_method: Optional[str] = 'spawn',
+    ):
         """
         Arguments:
         env_fns: iterable of callables -  functions that create environments to run in subprocesses. Need to be cloud-pickleable
