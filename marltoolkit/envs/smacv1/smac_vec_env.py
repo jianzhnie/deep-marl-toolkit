@@ -136,18 +136,20 @@ class SubprocVecSMAC(BaseVecEnv):
         self.rew_shape = (self.num_agents, 1)
         self.dim_reward = self.num_agents
         self.action_space = Discrete(n=self.action_dim)
-        self.state_space = Box(
-            low=-np.inf, high=np.inf, shape=[self.state_dim])
+        self.state_space = Box(low=-np.inf,
+                               high=np.inf,
+                               shape=[self.state_dim])
 
-        self.buf_obs = np.zeros(
-            combined_shape(self.num_envs, self.obs_shape), dtype=np.float32)
-        self.buf_state = np.zeros(
-            combined_shape(self.num_envs, self.state_dim), dtype=np.float32)
+        self.buf_obs = np.zeros(combined_shape(self.num_envs, self.obs_shape),
+                                dtype=np.float32)
+        self.buf_state = np.zeros(combined_shape(self.num_envs,
+                                                 self.state_dim),
+                                  dtype=np.float32)
         self.buf_terminal = np.zeros((self.num_envs, 1), dtype=bool)
         self.buf_truncation = np.zeros((self.num_envs, 1), dtype=bool)
         self.buf_done = np.zeros((self.num_envs, ), dtype=bool)
-        self.buf_reward = np.zeros(
-            (self.num_envs, ) + self.rew_shape, dtype=np.float32)
+        self.buf_reward = np.zeros((self.num_envs, ) + self.rew_shape,
+                                   dtype=np.float32)
         self.buf_info = [{} for _ in range(self.num_envs)]
         self.actions = None
         self.battles_game = np.zeros(self.num_envs, np.int32)
@@ -180,8 +182,8 @@ class SubprocVecSMAC(BaseVecEnv):
     def step_wait(self):
         self._assert_not_closed()
         if self.waiting:
-            for idx_env, env_done, remote in zip(
-                    range(self.num_envs), self.buf_done, self.remotes):
+            for idx_env, env_done, remote in zip(range(self.num_envs),
+                                                 self.buf_done, self.remotes):
                 if not env_done:
                     result = remote.recv()
                     state, obs, reward, terminal, truncated, infos = result

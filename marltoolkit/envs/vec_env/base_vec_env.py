@@ -28,6 +28,7 @@ class BaseVecEnv(ABC):
         self,
         num_envs: int,
         observation_space: spaces.Space,
+        share_observation_space: spaces.Space,
         action_space: spaces.Space,
     ):
         """Initialize the vectorized environment.
@@ -39,6 +40,7 @@ class BaseVecEnv(ABC):
         """
         self.num_envs = num_envs
         self.observation_space = observation_space
+        self.share_observation_space = share_observation_space
         self.action_space = action_space
         self.closed = False
 
@@ -113,7 +115,7 @@ class BaseVecEnv(ABC):
 
         :param mode: the rendering type
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def get_images(self) -> List[np.ndarray]:
         """Return RGB images from each environment.

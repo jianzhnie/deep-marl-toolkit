@@ -716,8 +716,8 @@ class WarGameSAWrapper:
         if squad_id not in squad_id2index:
             raise RuntimeError(
                 f'squad_id {squad_id} not in record: {squad_id2index}')
-        return _simple_one_hot(
-            index=squad_id2index[squad_id], size=len(squad_id2index))
+        return _simple_one_hot(index=squad_id2index[squad_id],
+                               size=len(squad_id2index))
 
     def encode_object_type(
             self, object_type: Union[ObjectType,

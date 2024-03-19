@@ -16,7 +16,7 @@ from marltoolkit.envs.marl_base_env import MARLBaseEnv
 class SMACEnv(object):
     """Wrapper for StarCraft2Env providing a more user-friendly interface."""
 
-    def __init__(self, map_name):
+    def __init__(self, map_name: str):
         """Initialize the SC2Env.
 
         Parameters:
