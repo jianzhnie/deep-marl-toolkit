@@ -70,9 +70,9 @@ class BaseVecEnv(ABC):
 
     @abstractmethod
     def step_wait(
-        self
+        self,
     ) -> Tuple[Union[np.ndarray, Dict[str, np.ndarray]], np.ndarray,
-               np.ndarray, List[Dict[str, Any]]]:
+               np.ndarray, List[Dict[str, Any]], ]:
         """Wait for the step taken with step_async(). Returns (obs, rews,
         dones, infos):
 
@@ -91,7 +91,7 @@ class BaseVecEnv(ABC):
     def step(
         self, actions: Union[np.ndarray, List[Any]]
     ) -> Tuple[Union[np.ndarray, Dict[str, np.ndarray]], np.ndarray,
-               np.ndarray, List[Dict[str, Any]]]:
+               np.ndarray, List[Dict[str, Any]], ]:
         """Perform a synchronous step: call step_async() and then wait for the
         results.
 

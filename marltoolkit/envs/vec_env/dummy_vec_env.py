@@ -43,8 +43,11 @@ class DummyVecEnv(BaseVecEnv):
             )
         env = self.envs[0]
         super().__init__(
-            len(env_fns), env.observation_space, env.share_observation_space,
-            env.action_space)
+            len(env_fns),
+            env.observation_space,
+            env.share_observation_space,
+            env.action_space,
+        )
         obs_space = env.observation_space
         self.keys, shapes, dtypes = obs_space_info(obs_space)
 
@@ -62,35 +65,44 @@ class DummyVecEnv(BaseVecEnv):
         self.actions = actions
 
     def step_wait(
-        self
+        self,
     ) -> Tuple[Union[np.ndarray, Dict[str, np.ndarray], Tuple[
-            np.ndarray, ...]], np.ndarray, np.ndarray, List[Dict]]:
+            np.ndarray, ...]], np.ndarray, np.ndarray, List[Dict], ]:
         # Avoid circular imports
         for env_idx in range(self.num_envs):
-            obs, self.buf_rews[env_idx], terminated, truncated, self.buf_infos[
-                env_idx] = self.envs[env_idx].step(self.actions[env_idx])
+            (
+                obs,
+                self.buf_rews[env_idx],
+                terminated,
+                truncated,
+                self.buf_infos[env_idx],
+            ) = self.envs[env_idx].step(self.actions[env_idx])
             # convert to SB3 VecEnv api
             self.buf_dones[env_idx] = terminated or truncated
             # See https://github.com/openai/gym/issues/3102
             # Gym 0.26 introduces a breaking change
-            self.buf_infos[env_idx][
-                'TimeLimit.truncated'] = truncated and not terminated
+            self.buf_infos[env_idx]['TimeLimit.truncated'] = (
+                truncated and not terminated)
 
             if self.buf_dones[env_idx]:
                 # save final observation where user can get it, then reset
                 self.buf_infos[env_idx]['terminal_observation'] = obs
                 obs, self.reset_infos[env_idx] = self.envs[env_idx].reset()
             self._save_obs(env_idx, obs)
-        return (self._obs_from_buf(), np.copy(self.buf_rews),
-                np.copy(self.buf_dones), deepcopy(self.buf_infos))
+        return (
+            self._obs_from_buf(),
+            np.copy(self.buf_rews),
+            np.copy(self.buf_dones),
+            deepcopy(self.buf_infos),
+        )
 
     def reset(
         self
     ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
         for env_idx in range(self.num_envs):
-            maybe_options = {
+            maybe_options = ({
                 'options': self._options[env_idx]
-            } if self._options[env_idx] else {}
+            } if self._options[env_idx] else {})
             obs, self.reset_infos[env_idx] = self.envs[env_idx].reset(
                 seed=self._seeds[env_idx], **maybe_options)
             self._save_obs(env_idx, obs)
@@ -120,8 +132,9 @@ class DummyVecEnv(BaseVecEnv):
         return super().render(mode=mode)
 
     def _save_obs(
-        self, env_idx: int, obs: Union[np.ndarray, Dict[str, np.ndarray],
-                                       Tuple[np.ndarray, ...]]
+        self,
+        env_idx: int,
+        obs: Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]],
     ) -> None:
         for key in self.keys:
             if key is None:
@@ -131,7 +144,7 @@ class DummyVecEnv(BaseVecEnv):
                     key]  # type: ignore[call-overload]
 
     def _obs_from_buf(
-        self
+        self,
     ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
         return dict_to_obs(self.observation_space, copy_obs_dict(self.buf_obs))
 
@@ -142,20 +155,24 @@ class DummyVecEnv(BaseVecEnv):
         target_envs = self._get_target_envs(indices)
         return [getattr(env_i, attr_name) for env_i in target_envs]
 
-    def set_attr(self,
-                 attr_name: str,
-                 value: Any,
-                 indices: Union[None, int, Iterable[int]] = None) -> None:
+    def set_attr(
+        self,
+        attr_name: str,
+        value: Any,
+        indices: Union[None, int, Iterable[int]] = None,
+    ) -> None:
         """Set attribute inside vectorized environments (see base class)."""
         target_envs = self._get_target_envs(indices)
         for env_i in target_envs:
             setattr(env_i, attr_name, value)
 
-    def env_method(self,
-                   method_name: str,
-                   *method_args,
-                   indices: Union[None, int, Iterable[int]] = None,
-                   **method_kwargs) -> List[Any]:
+    def env_method(
+        self,
+        method_name: str,
+        *method_args,
+        indices: Union[None, int, Iterable[int]] = None,
+        **method_kwargs,
+    ) -> List[Any]:
         """Call instance methods of vectorized environments."""
         target_envs = self._get_target_envs(indices)
         return [
@@ -164,9 +181,10 @@ class DummyVecEnv(BaseVecEnv):
         ]
 
     def env_is_wrapped(
-            self,
-            wrapper_class: Type[gym.Wrapper],
-            indices: Union[None, int, Iterable[int]] = None) -> List[bool]:
+        self,
+        wrapper_class: Type[gym.Wrapper],
+        indices: Union[None, int, Iterable[int]] = None,
+    ) -> List[bool]:
         """Check if worker environments are wrapped with a given wrapper."""
         target_envs = self._get_target_envs(indices)
         # Import here to avoid a circular import
@@ -188,8 +206,11 @@ class ShareDummyVecEnv(BaseVecEnv):
         self.envs = [fn() for fn in env_fns]
         env = self.envs[0]
         super().__init__(
-            len(env_fns), env.observation_space, env.share_observation_space,
-            env.action_space)
+            len(env_fns),
+            env.observation_space,
+            env.share_observation_space,
+            env.action_space,
+        )
         self.actions = None
         self.num_agents = env.num_agents
 

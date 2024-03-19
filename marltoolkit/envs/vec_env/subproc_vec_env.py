@@ -4,8 +4,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import gymnasium
 import numpy as np
 
-from marltoolkit.envs.base_vec_env import BaseVecEnv, CloudpickleWrapper
 from marltoolkit.envs.smacv1 import clear_mpi_env_vars
+
+from .base_vec_env import BaseVecEnv, CloudpickleWrapper
 
 
 def worker(
@@ -20,8 +21,8 @@ def worker(
         try:
             cmd, data = remote.recv()
             if cmd == 'step':
-                state, obs, available_actions, reward, terminated, truncated, info = env.step(
-                    data)
+                state, obs, available_actions, reward, terminated, truncated, info = (
+                    env.step(data))
                 print(info)
                 # # convert to SB3 VecEnv api
                 # done = terminated or truncated
@@ -30,8 +31,15 @@ def worker(
                 #     # save final obs where user can get it, then reset
                 #     info['obs'] = obs
                 #     state, obs, available_actions, reset_info = env.reset()
-                remote.send((state, obs, available_actions, reward, terminated,
-                             info, reset_info))
+                remote.send((
+                    state,
+                    obs,
+                    available_actions,
+                    reward,
+                    terminated,
+                    info,
+                    reset_info,
+                ))
             elif cmd == 'reset':
                 state, obs, available_actions, reset_info = env.reset()
                 remote.send((state, obs, available_actions, reset_info))
@@ -42,8 +50,12 @@ def worker(
                 remote.close()
                 break
             elif cmd == 'get_spaces':
-                remote.send((env.state_space, env.obs_space,
-                             env.action_mask_space, env.action_space))
+                remote.send((
+                    env.state_space,
+                    env.obs_space,
+                    env.action_mask_space,
+                    env.action_space,
+                ))
             elif cmd == 'get_num_agents':
                 remote.send((env.num_agents))
             else:
@@ -125,14 +137,20 @@ class SubprocVecEnv(BaseVecEnv):
         self.waiting = True
 
     def step_wait(
-        self
+        self,
     ) -> Tuple[Union[np.ndarray, Dict[str, np.ndarray], Tuple[
-            np.ndarray, ...]], np.ndarray, np.ndarray, List[Dict]]:
+            np.ndarray, ...]], np.ndarray, np.ndarray, List[Dict], ]:
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
         state, obs, rews, dones, infos, available_actions = zip(*results)
-        return np.stack(state), np.stack(obs), np.stack(rews), np.stack(
-            dones), infos, np.stack(available_actions)
+        return (
+            np.stack(state),
+            np.stack(obs),
+            np.stack(rews),
+            np.stack(dones),
+            infos,
+            np.stack(available_actions),
+        )
 
     def reset(
         self
@@ -141,8 +159,12 @@ class SubprocVecEnv(BaseVecEnv):
             remote.send(('reset', None))
         results = [remote.recv() for remote in self.remotes]
         state, obs, available_actions, self.reset_infos = zip(*results)
-        return np.stack(state), np.stack(obs), np.stack(
-            available_actions), np.stack(self.reset_infos)
+        return (
+            np.stack(state),
+            np.stack(obs),
+            np.stack(available_actions),
+            np.stack(self.reset_infos),
+        )
 
     def close(self) -> None:
         if self.closed:
