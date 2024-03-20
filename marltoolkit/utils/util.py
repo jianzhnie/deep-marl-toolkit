@@ -5,6 +5,7 @@ multi-agent envs."""
 from typing import List, Sequence, Tuple, Union
 
 import numpy as np
+from gymnasium import spaces
 
 
 def tile_images(
@@ -96,3 +97,20 @@ def flatten_list(lst: Union[List, Tuple]) -> List:
 
     # Flatten the list
     return [item for sublist in lst for item in sublist]
+
+
+def check_for_nested_spaces(obs_space: spaces.Space) -> None:
+    """Make sure the observation space does not have nested spaces
+    (Dicts/Tuples inside Dicts/Tuples). If so, raise an Exception informing
+    that there is no support for this.
+
+    :param obs_space: an observation space
+    """
+    if isinstance(obs_space, (spaces.Dict, spaces.Tuple)):
+        sub_spaces = (obs_space.spaces.values() if isinstance(
+            obs_space, spaces.Dict) else obs_space.spaces)
+        for sub_space in sub_spaces:
+            if isinstance(sub_space, (spaces.Dict, spaces.Tuple)):
+                raise NotImplementedError(
+                    'Nested observation spaces are not supported (Tuple/Dict space inside Tuple/Dict space).'
+                )
