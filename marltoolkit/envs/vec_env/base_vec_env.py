@@ -14,7 +14,7 @@ class BaseVecEnv(ABC):
 
     Attributes:
         num_envs (int): Number of environments in the vectorized environment.
-        observation_space: The observation space of a single environment.
+        obs_space: The observation space of a single environment.
         action_space: The action space of a single environment.
         closed (bool): Indicates whether the vectorized environment is closed.
     """
@@ -27,20 +27,20 @@ class BaseVecEnv(ABC):
     def __init__(
         self,
         num_envs: int,
-        observation_space: spaces.Space,
-        share_observation_space: spaces.Space,
+        obs_space: spaces.Space,
+        share_obs_space: spaces.Space,
         action_space: spaces.Space,
-    ):
+    ) -> None:
         """Initialize the vectorized environment.
 
         Args:
             num_envs (int): Number of environments in the vectorized environment.
-            observation_space: The observation space of a single environment.
+            obs_space: The observation space of a single environment.
             action_space: The action space of a single environment.
         """
         self.num_envs = num_envs
-        self.observation_space = observation_space
-        self.share_observation_space = share_observation_space
+        self.obs_space = obs_space
+        self.share_obs_space = share_obs_space
         self.action_space = action_space
         self.closed = False
 

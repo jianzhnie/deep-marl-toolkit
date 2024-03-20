@@ -27,8 +27,8 @@ class DummyVecEnv(BaseVecEnv):
         env = self.envs[0]
         super().__init__(
             len(env_fns),
-            env.observation_space,
-            env.share_observation_space,
+            env.obs_space,
+            env.share_obs_space,
             env.action_space,
         )
         self.actions = None
@@ -66,8 +66,8 @@ class ShareDummyVecEnv(BaseVecEnv):
         env = self.envs[0]
         super().__init__(
             len(env_fns),
-            env.observation_space,
-            env.share_observation_space,
+            env.obs_space,
+            env.share_obs_space,
             env.action_space,
         )
         self.actions = None
@@ -99,8 +99,8 @@ class ChooseDummyVecEnv(BaseVecEnv):
         env = self.envs[0]
         super().__init__(
             len(env_fns),
-            env.observation_space,
-            env.share_observation_space,
+            env.obs_space,
+            env.share_obs_space,
             env.action_space,
         )
         self.actions = None

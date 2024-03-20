@@ -1,9 +1,3 @@
-'''
-Author: jianzhnie
-LastEditors: jianzhnie
-Description: RLToolKit is a flexible and high-efficient reinforcement learning framework.
-Copyright (c) 2022 by jianzhnie@126.com, All Rights Reserved.
-'''
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -34,16 +28,16 @@ class SMACEnv(object):
         self.n_actions = self.env_info['n_actions']
 
         # State and observation shapes
-        self.state_shape = self.env_info['state_shape']
         self.obs_shape = self.env_info['obs_shape']
+        self.share_obs_shape = self.env_info['state_shape']
 
         # Reward and done shapes
         self.dim_reward = self.num_agents
         self.dim_done = self.num_agents
 
         # Space
-        self.state_space = Box(-2.0, 2.0, shape=(self.state_shape, ))
         self.obs_space = Box(-2.0, 2.0, shape=(self.obs_shape, ))
+        self.share_obs_space = Box(-2.0, 2.0, shape=(self.share_obs_shape, ))
         self.action_mask_space = Box(-2.0, 2.0, shape=(self.n_actions, ))
         self.action_space = Discrete(self.n_actions)
 
@@ -129,8 +123,8 @@ class SMACEnv(object):
     def get_env_info(self):
         """Get the environment information."""
         env_info = {
-            'state_space': self.state_space,
             'obs_space': self.obs_space,
+            'share_obs_space': self.share_obs_space,
             'action_mask_space': self.action_mask_space,
             'action_space': self.action_space,
             'num_agents': self.num_agents,

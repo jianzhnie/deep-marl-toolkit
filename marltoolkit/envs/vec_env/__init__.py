@@ -1,6 +1,7 @@
 from .base_vec_env import BaseVecEnv, CloudpickleWrapper
 from .dummy_vec_env import ChooseDummyVecEnv, DummyVecEnv, ShareDummyVecEnv
-from .subproc_vec_env import SubprocVecEnv
+from .subproc_vec_env import (ChooseSubprocVecEnv, ShareSubprocVecEnv,
+                              SubprocVecEnv)
 
 __all__ = [
     'BaseVecEnv',
@@ -9,4 +10,6 @@ __all__ = [
     'ChooseDummyVecEnv',
     'SubprocVecEnv',
     'CloudpickleWrapper',
+    'ShareSubprocVecEnv',
+    'ChooseSubprocVecEnv',
 ]
