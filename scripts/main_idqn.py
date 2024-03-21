@@ -34,9 +34,8 @@ def main():
     qmix_config = IDQNConfig()
     common_args = get_common_args()
     args = argparse.Namespace(**vars(common_args), **vars(qmix_config))
-    device = (
-        torch.device('cuda')
-        if torch.cuda.is_available() and args.cuda else torch.device('cpu'))
+    device = (torch.device('cuda') if torch.cuda.is_available() and args.cuda
+              else torch.device('cpu'))
 
     env = StarCraft2Env(map_name=args.scenario, difficulty=args.difficulty)
 
