@@ -1,8 +1,9 @@
 import contextlib
 import multiprocessing as mp
 import os
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable, Iterable, List, Optional, Type, Union
 
+import gymnasium as gym
 import numpy as np
 
 from marltoolkit.envs.smacv1.smac_env import SMACWrapperEnv
@@ -256,3 +257,61 @@ class SubprocVecSMAC(BaseVecEnv):
     def __del__(self):
         if not self.closed:
             self.close()
+
+    def get_attr(self,
+                 attr_name: str,
+                 indices: Union[None, int, Iterable[int]] = None) -> List[Any]:
+        """Return attribute from vectorized environment (see base class)."""
+        target_remotes = self._get_target_remotes(indices)
+        for remote in target_remotes:
+            remote.send(('get_attr', attr_name))
+        return [remote.recv() for remote in target_remotes]
+
+    def set_attr(
+        self,
+        attr_name: str,
+        value: Any,
+        indices: Union[None, int, Iterable[int]] = None,
+    ) -> None:
+        """Set attribute inside vectorized environments (see base class)."""
+        target_remotes = self._get_target_remotes(indices)
+        for remote in target_remotes:
+            remote.send(('set_attr', (attr_name, value)))
+        for remote in target_remotes:
+            remote.recv()
+
+    def env_method(
+        self,
+        method_name: str,
+        *method_args,
+        indices: Union[None, int, Iterable[int]] = None,
+        **method_kwargs,
+    ) -> List[Any]:
+        """Call instance methods of vectorized environments."""
+        target_remotes = self._get_target_remotes(indices)
+        for remote in target_remotes:
+            remote.send(
+                ('env_method', (method_name, method_args, method_kwargs)))
+        return [remote.recv() for remote in target_remotes]
+
+    def env_is_wrapped(
+        self,
+        wrapper_class: Type[gym.Wrapper],
+        indices: Union[None, int, Iterable[int]] = None,
+    ) -> List[bool]:
+        """Check if worker environments are wrapped with a given wrapper."""
+        target_remotes = self._get_target_remotes(indices)
+        for remote in target_remotes:
+            remote.send(('is_wrapped', wrapper_class))
+        return [remote.recv() for remote in target_remotes]
+
+    def _get_target_remotes(
+            self, indices: Union[None, int, Iterable[int]]) -> List[Any]:
+        """Get the connection object needed to communicate with the wanted envs
+        that are in subprocesses.
+
+        :param indices: refers to indices of envs.
+        :return: Connection object to communicate between processes.
+        """
+        indices = self._get_indices(indices)
+        return [self.remotes[i] for i in indices]

@@ -86,8 +86,7 @@ def _worker(
                 remote.close()
                 break
             elif cmd == 'get_spaces':
-                remote.send(
-                    (env.obs_space, env.share_obs_space, env.action_space))
+                remote.send((env.obs_space, env.state_space, env.action_space))
             elif cmd == 'env_method':
                 method = getattr(env, data[0])
                 remote.send(method(*data[1], **data[2]))
@@ -158,10 +157,9 @@ class SubprocVecEnv(BaseVecEnv):
             work_remote.close()
 
         self.remotes[0].send(('get_spaces', None))
-        obs_space, share_obs_space, action_space = self.remotes[0].recv()
+        obs_space, state_space, action_space = self.remotes[0].recv()
 
-        super().__init__(len(env_fns), obs_space, share_obs_space,
-                         action_space)
+        super().__init__(len(env_fns), obs_space, state_space, action_space)
 
     def step_async(self, actions: np.ndarray) -> None:
         for remote, action in zip(self.remotes, actions):
@@ -177,7 +175,7 @@ class SubprocVecEnv(BaseVecEnv):
         state, obs, rews, dones, infos, self.reset_infos = zip(
             *results)  # type: ignore[assignment]
         return (
-            _flatten_obs(state, self.share_obs_space),
+            _flatten_obs(state, self.state_space),
             _flatten_obs(obs, self.obs_space),
             np.stack(rews),
             np.stack(dones),
@@ -196,7 +194,7 @@ class SubprocVecEnv(BaseVecEnv):
         # Seeds and options are only used once
         self._reset_seeds()
         self._reset_options()
-        return _flatten_obs(state, self.share_obs_space), _flatten_obs(
+        return _flatten_obs(state, self.state_space), _flatten_obs(
             obs, self.obs_space)
 
     def close(self) -> None:
@@ -307,7 +305,7 @@ def shareworker(remote, parent_remote, env_fn_wrapper):
             remote.close()
             break
         elif cmd == 'get_spaces':
-            remote.send((env.obs_space, env.share_obs_space, env.action_space))
+            remote.send((env.obs_space, env.state_space, env.action_space))
         elif cmd == 'get_num_agents':
             remote.send((env.num_agents))
         else:
@@ -368,11 +366,10 @@ class ShareSubprocVecEnv(BaseVecEnv):
             remote.close()
 
         self.remotes[0].send(('get_spaces', None))
-        obs_space, share_obs_space, action_space = self.remotes[0].recv()
+        obs_space, state_space, action_space = self.remotes[0].recv()
         self.num_agents = self.remotes[0].recv()
 
-        super().__init__(len(env_fns), obs_space, share_obs_space,
-                         action_space)
+        super().__init__(len(env_fns), obs_space, state_space, action_space)
 
     def step_async(self, actions: np.ndarray) -> None:
         for remote, action in zip(self.remotes, actions):
@@ -435,7 +432,7 @@ def chooseworker(remote, parent_remote, env_fn_wrapper):
             remote.close()
             break
         elif cmd == 'get_spaces':
-            remote.send((env.obs_space, env.share_obs_space, env.action_space))
+            remote.send((env.obs_space, env.state_space, env.action_space))
         elif cmd == 'get_num_agents':
             remote.send((env.num_agents))
         else:
@@ -496,11 +493,10 @@ class ChooseSubprocVecEnv(BaseVecEnv):
             remote.close()
 
         self.remotes[0].send(('get_spaces', None))
-        obs_space, share_obs_space, action_space = self.remotes[0].recv()
+        obs_space, state_space, action_space = self.remotes[0].recv()
         self.num_agents = self.remotes[0].recv()
 
-        super().__init__(len(env_fns), obs_space, share_obs_space,
-                         action_space)
+        super().__init__(len(env_fns), obs_space, state_space, action_space)
 
     def step_async(self, actions: np.ndarray) -> None:
         for remote, action in zip(self.remotes, actions):

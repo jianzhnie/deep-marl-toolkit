@@ -33,7 +33,7 @@ class DummyVecEnv(BaseVecEnv):
         super().__init__(
             len(env_fns),
             env.obs_space,
-            env.share_obs_space,
+            env.state_space,
             env.action_space,
         )
         obs_space = env.obs_space
@@ -187,7 +187,7 @@ class ShareDummyVecEnv(BaseVecEnv):
         super().__init__(
             len(env_fns),
             env.obs_space,
-            env.share_obs_space,
+            env.state_space,
             env.action_space,
         )
         self.actions = None
@@ -220,7 +220,7 @@ class ChooseDummyVecEnv(BaseVecEnv):
         super().__init__(
             len(env_fns),
             env.obs_space,
-            env.share_obs_space,
+            env.state_space,
             env.action_space,
         )
         self.actions = None
