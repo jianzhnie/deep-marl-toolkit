@@ -375,12 +375,21 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
         action_space: Union[int, Tuple],
         reward_space: Union[int, Tuple],
         done_space: Union[int, Tuple],
+        device: Union[torch.device, str] = 'cpu',
         **kwargs,
     ):
-        super(OffPolicyBufferRNN,
-              self).__init__(num_envs, buffer_size, num_agents, state_space,
-                             obs_space, action_space, reward_space, done_space)
         self.episode_limit = episode_limit
+        super(OffPolicyBufferRNN, self).__init__(
+            num_envs,
+            buffer_size,
+            num_agents,
+            state_space,
+            obs_space,
+            action_space,
+            reward_space,
+            done_space,
+            device=device,
+        )
         self.episode_data = MaEpisodeData(num_envs, num_agents, episode_limit,
                                           state_space, obs_space, action_space,
                                           reward_space, done_space)
@@ -390,7 +399,8 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
             obs=np.zeros(
                 (self.buffer_size, self.num_agents, self.episode_limit) +
                 self.obs_space,
-                dtype=np.float32),
+                dtype=np.float32,
+            ),
             obs_next=np.zeros(
                 (self.num_agents, self.episode_limit) + self.obs_space,
                 dtype=np.float32),
@@ -400,16 +410,18 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
             actions_onehot=np.zeros(
                 (self.num_agents, self.episode_limit, self.num_agents) +
                 self.action_space,
-                dtype=np.int8),
+                dtype=np.int8,
+            ),
             available_actions=np.zeros(
                 (self.num_agents, self.episode_limit, self.num_agents) +
                 self.action_space,
-                dtype=np.int8),
-            rewards=np.zeros((self.episode_limit) + self.reward_space,
+                dtype=np.int8,
+            ),
+            rewards=np.zeros((self.episode_limit, ) + self.reward_space,
                              dtype=np.float32),
-            terminated=np.zeros((self.episode_limit) + self.done_space,
+            terminated=np.zeros((self.episode_limit, ) + self.done_space,
                                 dtype=bool),
-            filled=np.zeros((self.episode_limit) + self.done_space,
+            filled=np.zeros((self.episode_limit, ) + self.done_space,
                             dtype=bool),
         )
         if self.store_global_state:

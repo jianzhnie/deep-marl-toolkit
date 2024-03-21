@@ -4,11 +4,11 @@ import numpy as np
 
 from marltoolkit.agents import BaseAgent
 from marltoolkit.data import OffPolicyBufferRNN
-from marltoolkit.envs import SubprocVecEnvSC2
+from marltoolkit.envs import BaseVecEnv
 
 
 def run_train_episode(
-    envs: SubprocVecEnvSC2,
+    envs: BaseVecEnv,
     agent: BaseAgent,
     rpm: OffPolicyBufferRNN,
     args: argparse.Namespace = None,
@@ -18,7 +18,7 @@ def run_train_episode(
     agent.reset_agent()
     episode_reward = 0.0
     episode_step = 0
-    state, obs, info = envs.reset()
+    state, obs = envs.reset()
     envs_done = envs.buf_done
     num_envs = envs.num_envs
     filled = np.zeros([num_envs, episode_limit, 1], dtype=np.int32)
@@ -57,7 +57,7 @@ def run_train_episode(
 
 
 def run_evaluate_episode(
-    env: SubprocVecEnvSC2,
+    env: BaseVecEnv,
     agent: BaseAgent,
     num_eval_episodes: int = 5,
 ):

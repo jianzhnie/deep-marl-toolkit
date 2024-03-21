@@ -10,13 +10,13 @@ from marltoolkit.envs.marl_base_env import MARLBaseEnv
 class SMACWrapperEnv(object):
     """Wrapper for StarCraft2Env providing a more user-friendly interface."""
 
-    def __init__(self, map_name: str):
+    def __init__(self, map_name: str, **kwargs):
         """Initialize the SC2Env.
 
         Parameters:
         - map_name (str): Name of the map for the StarCraft2 environment.
         """
-        self.env = StarCraft2Env(map_name=map_name)
+        self.env = StarCraft2Env(map_name=map_name, **kwargs)
         self.env_info = self.env.get_env_info()
 
         # Number of agents and enemies
@@ -32,8 +32,8 @@ class SMACWrapperEnv(object):
         self.state_shape = self.env_info['state_shape']
 
         # Reward and done shapes
-        self.dim_reward = self.num_agents
-        self.dim_done = self.num_agents
+        self.reward_dim = self.num_agents
+        self.done_dim = self.num_agents
 
         # Space
         self.obs_space = Box(-2.0, 2.0, shape=(self.obs_shape, ))
@@ -41,8 +41,8 @@ class SMACWrapperEnv(object):
         self.action_mask_space = Box(-2.0, 2.0, shape=(self.n_actions, ))
         self.action_space = Discrete(self.n_actions)
 
-        self.reward_space = (self.dim_reward, )
-        self.done_space = (self.dim_done, )
+        self.reward_space = (self.reward_dim, )
+        self.done_space = (self.done_dim, )
 
         # Max episode steps
         self.episode_limit = self.env_info['episode_limit']

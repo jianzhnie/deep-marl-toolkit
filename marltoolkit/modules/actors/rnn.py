@@ -14,14 +14,14 @@ class RNNModel(nn.Module):
 
     def __init__(
         self,
-        input_shape: int = None,
+        input_dim: int = None,
         rnn_hidden_dim: int = 64,
         n_actions: int = None,
     ):
         super(RNNModel, self).__init__()
         self.rnn_hidden_dim = rnn_hidden_dim
 
-        self.fc1 = nn.Linear(input_shape, rnn_hidden_dim)
+        self.fc1 = nn.Linear(input_dim, rnn_hidden_dim)
         self.rnn = nn.GRUCell(rnn_hidden_dim, rnn_hidden_dim)
         self.fc2 = nn.Linear(rnn_hidden_dim, n_actions)
 
