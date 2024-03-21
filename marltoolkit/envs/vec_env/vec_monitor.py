@@ -28,7 +28,7 @@ class Monitor(gym.Wrapper):
             allow_early_resets: bool = True,
             reset_keywords: Tuple[str, ...] = (),
             info_keywords: Tuple[str, ...] = (),
-    ):
+    ) -> None:
         super().__init__(env=env)
         self.t_start = time.time()
         self.reset_keywords = reset_keywords
