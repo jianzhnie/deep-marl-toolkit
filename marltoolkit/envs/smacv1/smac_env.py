@@ -7,7 +7,7 @@ from smac.env import StarCraft2Env
 from marltoolkit.envs.marl_base_env import MARLBaseEnv
 
 
-class SMACEnv(object):
+class SMACWrapperEnv(object):
     """Wrapper for StarCraft2Env providing a more user-friendly interface."""
 
     def __init__(self, map_name: str):
@@ -29,7 +29,7 @@ class SMACEnv(object):
 
         # State and observation shapes
         self.obs_shape = self.env_info['obs_shape']
-        self.share_obs_shape = self.env_info['state_shape']
+        self.state_shape = self.env_info['state_shape']
 
         # Reward and done shapes
         self.dim_reward = self.num_agents
@@ -37,7 +37,7 @@ class SMACEnv(object):
 
         # Space
         self.obs_space = Box(-2.0, 2.0, shape=(self.obs_shape, ))
-        self.share_obs_space = Box(-2.0, 2.0, shape=(self.share_obs_shape, ))
+        self.state_space = Box(-2.0, 2.0, shape=(self.state_shape, ))
         self.action_mask_space = Box(-2.0, 2.0, shape=(self.n_actions, ))
         self.action_space = Discrete(self.n_actions)
 
@@ -46,6 +46,7 @@ class SMACEnv(object):
 
         # Max episode steps
         self.episode_limit = self.env_info['episode_limit']
+        self.filled = np.zeros([self.episode_limit, 1], bool)
 
         # Buffer information
         self.buf_info = {
@@ -57,6 +58,9 @@ class SMACEnv(object):
         # Episode variables
         self._episode_step = 0
         self._episode_score = 0
+
+        # Render Mode
+        self.render_mode = 'human'
 
     @property
     def win_counted(self):
@@ -70,7 +74,7 @@ class SMACEnv(object):
         """Close the environment."""
         self.env.close()
 
-    def render(self, mode):
+    def render(self, mode: str):
         """Render the environment.
 
         Parameters:
@@ -78,20 +82,20 @@ class SMACEnv(object):
         """
         return self.env.render(mode)
 
-    def reset(self):
+    def reset(self, seed: int = None):
         """Reset the environment.
 
         Returns:
         - Tuple: Tuple containing state, observation, concatenated observation, and info.
         """
-        obs_smac, state_smac = self.env.reset()
+        obs, state = self.env.reset()
         self._episode_step = 0
         self._episode_score = 0.0
         info = {
             'episode_step': self._episode_step,
             'episode_score': self._episode_score,
         }
-        return state_smac, obs_smac, info
+        return obs, state, info
 
     def step(self, actions: Union[np.ndarray, List[int]]) -> Tuple:
         """Take a step in the environment.
@@ -107,8 +111,8 @@ class SMACEnv(object):
         if not info:
             info = self.buf_info
 
-        obs_smac = self.env.get_obs()
-        state_smac = self.env.get_state()
+        obs = self.env.get_obs()
+        state = self.env.get_state()
         reward_n = np.array([[reward] for _ in range(self.num_agents)])
 
         self._episode_step += 1
@@ -118,14 +122,17 @@ class SMACEnv(object):
         info['episode_score'] = self._episode_score
 
         truncated = True if self._episode_step >= self.episode_limit else False
-        return state_smac, obs_smac, reward_n, [terminated], [truncated], info
+        return obs, state, reward_n, terminated, truncated, info
 
     def get_env_info(self):
         """Get the environment information."""
         env_info = {
+            'obs_shape': self.obs_shape,
             'obs_space': self.obs_space,
-            'share_obs_space': self.share_obs_space,
+            'state_shape': self.state_shape,
+            'state_space': self.state_space,
             'action_mask_space': self.action_mask_space,
+            'n_actions': self.n_actions,
             'action_space': self.action_space,
             'num_agents': self.num_agents,
             'episode_limit': self.episode_limit,

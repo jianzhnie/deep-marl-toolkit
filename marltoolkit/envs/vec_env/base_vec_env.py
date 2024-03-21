@@ -27,13 +27,13 @@ class BaseVecEnv(ABC):
         self,
         num_envs: int,
         obs_space: spaces.Space,
-        share_obs_space: spaces.Space,
+        state_space: spaces.Space,
         action_space: spaces.Space,
     ) -> None:
         self.closed = False
         self.num_envs = num_envs
         self.obs_space = obs_space
-        self.share_obs_space = share_obs_space
+        self.state_space = state_space
         self.action_space = action_space
         # store info returned by the reset method
         self.reset_infos: List[Dict[str, Any]] = [{} for _ in range(num_envs)]
@@ -58,7 +58,6 @@ class BaseVecEnv(ABC):
         render_modes = []
         if self.render_mode is not None:
             if self.render_mode == 'rgb_array':
-                # SB3 uses OpenCV for the "human" mode
                 render_modes = ['human', 'rgb_array']
             else:
                 render_modes = [self.render_mode]
@@ -163,7 +162,7 @@ class BaseVecEnv(ABC):
         :param indices: Indices of envs to get attribute from
         :return: List of values of 'attr_name' in all environments
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abstractmethod
     def set_attr(
@@ -179,7 +178,7 @@ class BaseVecEnv(ABC):
         :param indices: Indices of envs to assign value
         :return:
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abstractmethod
     def env_method(
@@ -197,7 +196,7 @@ class BaseVecEnv(ABC):
         :param method_kwargs: Any keyword arguments to provide in the call
         :return: List of items returned by the environment's method call
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def get_images(self) -> Sequence[Optional[np.ndarray]]:
         """Return RGB images from each environment.

@@ -4,9 +4,8 @@ import os
 from typing import Any, Callable, List, Optional, Union
 
 import numpy as np
-from gymnasium.spaces import Box, Discrete
 
-from marltoolkit.envs.marl_base_env import MARLBaseEnv
+from marltoolkit.envs.smacv1.smac_env import SMACWrapperEnv
 from marltoolkit.envs.vec_env import BaseVecEnv, CloudpickleWrapper
 from marltoolkit.utils.util import combined_shape, flatten_list
 
@@ -39,12 +38,12 @@ def worker(
     env_fn_wrappers: CloudpickleWrapper = None,
 ) -> None:
 
-    def step_env(env: MARLBaseEnv, actions: Union[np.ndarray, List[Any]]):
+    def step_env(env: SMACWrapperEnv, actions: Union[np.ndarray, List[Any]]):
         state, obs, reward, terminated, truncated, info = env.step(actions)
         return state, obs, reward, terminated, truncated, info
 
     parent_remote.close()
-    envs: List[MARLBaseEnv] = [
+    envs: List[SMACWrapperEnv] = [
         env_fn_wrapper() for env_fn_wrapper in env_fn_wrappers.x
     ]
     while True:
@@ -86,7 +85,7 @@ class SubprocVecSMAC(BaseVecEnv):
 
     def __init__(
         self,
-        env_fns: List[Callable[[], MARLBaseEnv]],
+        env_fns: List[Callable[[], SMACWrapperEnv]],
         start_method: Optional[str] = 'spawn',
     ):
         """
@@ -122,23 +121,21 @@ class SubprocVecSMAC(BaseVecEnv):
             work_remote.close()
 
         self.remotes[0].send(('get_env_info', None))
-        env_info, self.num_enemies = self.remotes[0].recv().x
-        self.obs_dim = env_info['obs_shape']
+        env_info = self.remotes[0].recv().x
+        self.obs_space = env_info['obs_space']
+        self.state_space = env_info['state_space']
         self.action_dim = self.n_actions = env_info['n_actions']
-        observation_space = (self.obs_dim, )
-        action_space = (self.action_dim, )
-        super().__init__(num_envs, observation_space, action_space)
+        self.action_space = env_info['action_space']
+        super().__init__(num_envs, self.obs_space, self.state_space,
+                         self.action_space)
 
+        self.obs_dim = env_info['obs_shape']
         self.state_dim = env_info['state_shape']
-        self.num_agents = env_info['n_agents']
+        self.num_agents = env_info['num_agents']
         self.obs_shape = (self.num_agents, self.obs_dim)
         self.act_shape = (self.num_agents, self.action_dim)
         self.rew_shape = (self.num_agents, 1)
         self.dim_reward = self.num_agents
-        self.action_space = Discrete(n=self.action_dim)
-        self.state_space = Box(low=-np.inf,
-                               high=np.inf,
-                               shape=[self.state_dim])
 
         self.buf_obs = np.zeros(combined_shape(self.num_envs, self.obs_shape),
                                 dtype=np.float32)

@@ -8,6 +8,7 @@ import gymnasium as gym
 import numpy as np
 
 from .base_vec_env import BaseVecEnv, CloudpickleWrapper
+from .utils import is_wrapped
 
 
 def _flatten_obs(
@@ -57,8 +58,6 @@ def _worker(
     env_fn_wrapper: CloudpickleWrapper,
 ) -> None:
     # Import here to avoid a circular import
-    from stable_baselines3.common.env_util import is_wrapped
-
     parent_remote.close()
     env = env_fn_wrapper.x()
     reset_info: Optional[Dict[str, Any]] = {}
@@ -66,21 +65,20 @@ def _worker(
         try:
             cmd, data = remote.recv()
             if cmd == 'step':
-                observation, reward, terminated, truncated, info = env.step(
+                state, obs, reward, terminated, truncated, info = env.step(
                     data)
-                # convert to SB3 VecEnv api
                 done = terminated or truncated
                 info['TimeLimit.truncated'] = truncated and not terminated
                 if done:
-                    # save final observation where user can get it, then reset
-                    info['terminal_observation'] = observation
-                    observation, reset_info = env.reset()
-                remote.send((observation, reward, done, info, reset_info))
+                    # save final obs where user can get it, then reset
+                    info['terminal_obs'] = obs
+                    state, obs, reset_info = env.reset()
+                remote.send((state, obs, reward, done, info, reset_info))
             elif cmd == 'reset':
                 maybe_options = {'options': data[1]} if data[1] else {}
-                observation, reset_info = env.reset(seed=data[0],
-                                                    **maybe_options)
-                remote.send((observation, reset_info))
+                state, obs, reset_info = env.reset(seed=data[0],
+                                                   **maybe_options)
+                remote.send((state, obs, reset_info))
             elif cmd == 'render':
                 remote.send(env.render())
             elif cmd == 'close':
@@ -88,7 +86,8 @@ def _worker(
                 remote.close()
                 break
             elif cmd == 'get_spaces':
-                remote.send((env.obs_space, env.action_space))
+                remote.send(
+                    (env.obs_space, env.share_obs_space, env.action_space))
             elif cmd == 'env_method':
                 method = getattr(env, data[0])
                 remote.send(method(*data[1], **data[2]))
@@ -175,9 +174,10 @@ class SubprocVecEnv(BaseVecEnv):
             np.ndarray, ...]], np.ndarray, np.ndarray, List[Dict], ]:
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
-        obs, rews, dones, infos, self.reset_infos = zip(
+        state, obs, rews, dones, infos, self.reset_infos = zip(
             *results)  # type: ignore[assignment]
         return (
+            _flatten_obs(state, self.share_obs_space),
             _flatten_obs(obs, self.obs_space),
             np.stack(rews),
             np.stack(dones),
@@ -191,11 +191,13 @@ class SubprocVecEnv(BaseVecEnv):
             remote.send(
                 ('reset', (self._seeds[env_idx], self._options[env_idx])))
         results = [remote.recv() for remote in self.remotes]
-        obs, self.reset_infos = zip(*results)  # type: ignore[assignment]
+        state, obs, self.reset_infos = zip(
+            *results)  # type: ignore[assignment]
         # Seeds and options are only used once
         self._reset_seeds()
         self._reset_options()
-        return _flatten_obs(obs, self.obs_space)
+        return _flatten_obs(state, self.share_obs_space), _flatten_obs(
+            obs, self.obs_space)
 
     def close(self) -> None:
         if self.closed:
