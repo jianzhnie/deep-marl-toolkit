@@ -36,14 +36,21 @@ class DummyVecEnv(BaseVecEnv):
             env.state_space,
             env.action_space,
         )
-        obs_space = env.obs_space
         self.actions = None
-        self.keys, shapes, dtypes = obs_space_info(obs_space)
+        self.obs_keys, obs_shapes, obs_dtypes = obs_space_info(env.obs_space)
+        self.state_keys, state_shapes, state_dtypes = obs_space_info(
+            env.state_space)
 
-        self.buf_obs = OrderedDict([(k,
-                                     np.zeros(
-                                         (self.num_envs, *tuple(shapes[k])),
-                                         dtype=dtypes[k])) for k in self.keys])
+        self.buf_obs = OrderedDict([(
+            k,
+            np.zeros((self.num_envs, *tuple(obs_shapes[k])),
+                     dtype=obs_dtypes[k]),
+        ) for k in self.obs_keys])
+        self.buf_state = OrderedDict([(
+            k,
+            np.zeros((self.num_envs, *tuple(state_shapes[k])),
+                     dtype=state_dtypes[k]),
+        ) for k in self.state_keys])
         self.buf_dones = np.zeros((self.num_envs, ), dtype=bool)
         self.buf_rews = np.zeros((self.num_envs, ), dtype=np.float32)
         self.buf_infos: List[Dict[str,
@@ -57,6 +64,7 @@ class DummyVecEnv(BaseVecEnv):
         for env_idx in range(self.num_envs):
             (
                 obs,
+                state,
                 self.buf_rews[env_idx],
                 terminated,
                 truncated,
@@ -71,9 +79,11 @@ class DummyVecEnv(BaseVecEnv):
                 obs, self.reset_infos[env_idx] = self.envs[env_idx].reset()
 
             self._save_obs(env_idx, obs)
+            self._save_state(env_idx, state)
 
         return (
             self._obs_from_buf(),
+            self._state_from_buf(),
             np.copy(self.buf_rews),
             np.copy(self.buf_dones),
             deepcopy(self.buf_infos),
@@ -119,17 +129,34 @@ class DummyVecEnv(BaseVecEnv):
         env_idx: int,
         obs: Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]],
     ) -> None:
-        for key in self.keys:
+        for key in self.obs_keys:
             if key is None:
                 self.buf_obs[key][env_idx] = obs
             else:
                 self.buf_obs[key][env_idx] = obs[
                     key]  # type: ignore[call-overload]
 
+    def _save_state(
+        self,
+        env_idx: int,
+        obs: Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]],
+    ) -> None:
+        for key in self.state_keys:
+            if key is None:
+                self.buf_state[key][env_idx] = obs
+            else:
+                self.buf_state[key][env_idx] = obs[
+                    key]  # type: ignore[call-overload]
+
     def _obs_from_buf(
         self,
     ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
         return dict_to_obs(self.obs_space, copy_obs_dict(self.buf_obs))
+
+    def _state_from_buf(
+        self,
+    ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
+        return dict_to_obs(self.state_space, copy_obs_dict(self.buf_state))
 
     def get_attr(self,
                  attr_name: str,
@@ -177,71 +204,3 @@ class DummyVecEnv(BaseVecEnv):
             self, indices: Union[None, int, Iterable[int]]) -> List[gym.Env]:
         indices = self._get_indices(indices)
         return [self.envs[i] for i in indices]
-
-
-class ShareDummyVecEnv(BaseVecEnv):
-
-    def __init__(self, env_fns: List[Callable[[], gym.Env]]):
-        self.envs = [fn() for fn in env_fns]
-        env = self.envs[0]
-        super().__init__(
-            len(env_fns),
-            env.obs_space,
-            env.state_space,
-            env.action_space,
-        )
-        self.actions = None
-        self.num_agents = env.num_agents
-
-    def step_async(self, actions):
-        self.actions = actions
-
-    def step_wait(self):
-        results = [env.step(a) for (a, env) in zip(self.actions, self.envs)]
-        obs, share_obs, rews, dones, infos, available_actions = map(
-            np.array, zip(*results))
-        return obs, share_obs, rews, dones, infos, available_actions
-
-    def reset(self):
-        results = [env.reset() for env in self.envs]
-        obs, share_obs, available_actions = map(np.array, zip(*results))
-        return obs, share_obs, available_actions
-
-    def close(self):
-        for env in self.envs:
-            env.close()
-
-
-class ChooseDummyVecEnv(BaseVecEnv):
-
-    def __init__(self, env_fns: List[Callable[[], gym.Env]]):
-        self.envs = [fn() for fn in env_fns]
-        env = self.envs[0]
-        super().__init__(
-            len(env_fns),
-            env.obs_space,
-            env.state_space,
-            env.action_space,
-        )
-        self.actions = None
-
-    def step_async(self, actions):
-        self.actions = actions
-
-    def step_wait(self):
-        results = [env.step(a) for (a, env) in zip(self.actions, self.envs)]
-        obs, share_obs, rews, dones, infos, available_actions = map(
-            np.array, zip(*results))
-        self.actions = None
-        return obs, share_obs, rews, dones, infos, available_actions
-
-    def reset(self, reset_choose):
-        results = [
-            env.reset(choose) for (env, choose) in zip(self.envs, reset_choose)
-        ]
-        obs, share_obs, available_actions = map(np.array, zip(*results))
-        return obs, share_obs, available_actions
-
-    def close(self):
-        for env in self.envs:
-            env.close()

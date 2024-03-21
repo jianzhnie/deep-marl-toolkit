@@ -2,7 +2,7 @@ import multiprocessing as mp
 import warnings
 from collections import OrderedDict
 from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
-                    Tuple, Type, Union)
+                    Type, Union)
 
 import gymnasium as gym
 import numpy as np
@@ -11,13 +11,7 @@ from .base_vec_env import BaseVecEnv, CloudpickleWrapper
 from .utils import is_wrapped
 
 
-def _flatten_obs(
-    obs: Union[List[Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray,
-                                                                   ...]]],
-               Tuple[Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray,
-                                                                    ...]]], ],
-    space: gym.spaces.Space,
-) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
+def _flatten_obs(obs, space: gym.spaces.Space):
     """Flatten observations, depending on the observation space.
 
     :param obs: observations.
@@ -133,7 +127,7 @@ class SubprocVecEnv(BaseVecEnv):
                  start_method: Optional[str] = None):
         self.waiting = False
         self.closed = False
-        n_envs = len(env_fns)
+        num_envs = len(env_fns)
 
         if start_method is None:
             # Fork is not a thread safe method (see issue #217)
@@ -144,7 +138,7 @@ class SubprocVecEnv(BaseVecEnv):
         ctx = mp.get_context(start_method)
 
         self.remotes, self.work_remotes = zip(
-            *[ctx.Pipe() for _ in range(n_envs)])
+            *[ctx.Pipe() for _ in range(num_envs)])
         self.processes = []
         for work_remote, remote, env_fn in zip(self.work_remotes, self.remotes,
                                                env_fns):
@@ -166,10 +160,7 @@ class SubprocVecEnv(BaseVecEnv):
             remote.send(('step', action))
         self.waiting = True
 
-    def step_wait(
-        self,
-    ) -> Tuple[Union[np.ndarray, Dict[str, np.ndarray], Tuple[
-            np.ndarray, ...]], np.ndarray, np.ndarray, List[Dict], ]:
+    def step_wait(self):
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
         state, obs, rews, dones, infos, self.reset_infos = zip(
@@ -182,9 +173,7 @@ class SubprocVecEnv(BaseVecEnv):
             infos,
         )  # type: ignore[return-value]
 
-    def reset(
-        self
-    ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
+    def reset(self):
         for env_idx, remote in enumerate(self.remotes):
             remote.send(
                 ('reset', (self._seeds[env_idx], self._options[env_idx])))
@@ -376,10 +365,7 @@ class ShareSubprocVecEnv(BaseVecEnv):
             remote.send(('step', action))
         self.waiting = True
 
-    def step_wait(
-        self,
-    ) -> Tuple[Union[np.ndarray, Dict[str, np.ndarray], Tuple[
-            np.ndarray, ...]], np.ndarray, np.ndarray, List[Dict], ]:
+    def step_wait(self):
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
         state, obs, rews, dones, infos = zip(*results)
@@ -391,9 +377,7 @@ class ShareSubprocVecEnv(BaseVecEnv):
             infos,
         )
 
-    def reset(
-        self
-    ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
+    def reset(self):
         for remote in self.remotes:
             remote.send(('reset', None))
         results = [remote.recv() for remote in self.remotes]
@@ -503,10 +487,7 @@ class ChooseSubprocVecEnv(BaseVecEnv):
             remote.send(('step', action))
         self.waiting = True
 
-    def step_wait(
-        self,
-    ) -> Tuple[Union[np.ndarray, Dict[str, np.ndarray], Tuple[
-            np.ndarray, ...]], np.ndarray, np.ndarray, List[Dict], ]:
+    def step_wait(self, ):
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
         state, obs, rews, dones, infos = zip(*results)
@@ -518,9 +499,7 @@ class ChooseSubprocVecEnv(BaseVecEnv):
             infos,
         )
 
-    def reset(
-        self
-    ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
+    def reset(self):
         for remote in self.remotes:
             remote.send(('reset', None))
         results = [remote.recv() for remote in self.remotes]
