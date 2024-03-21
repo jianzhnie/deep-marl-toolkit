@@ -1,9 +1,12 @@
+import inspect
 import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import (Any, Dict, Iterable, List, Optional, Sequence, Tuple, Type,
+                    Union)
 
 import cloudpickle
+import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
@@ -198,6 +201,21 @@ class BaseVecEnv(ABC):
         """
         raise NotImplementedError
 
+    def env_is_wrapped(
+        self,
+        wrapper_class: Type[gym.Wrapper],
+        indices: Union[None, int, Iterable[int]] = None,
+    ) -> List[bool]:
+        """Check if environments are wrapped with a given wrapper.
+
+        :param method_name: The name of the environment method to invoke.
+        :param indices: Indices of envs whose method to call
+        :param method_args: Any positional arguments to provide in the call
+        :param method_kwargs: Any keyword arguments to provide in the call
+        :return: True if the env is wrapped, False otherwise, for each env queried.
+        """
+        raise NotImplementedError
+
     def get_images(self) -> Sequence[Optional[np.ndarray]]:
         """Return RGB images from each environment.
 
@@ -332,6 +350,157 @@ class BaseVecEnv(ABC):
         elif isinstance(indices, int):
             indices = [indices]
         return indices
+
+
+class VecEnvWrapper(BaseVecEnv):
+    """Vectorized environment base class.
+
+    :param vec_env: the vectorized environment to wrap
+    :param obs_space: the observation space (can be None to load from vec_env)
+    :param action_space: the action space (can be None to load from vec_env)
+    """
+
+    def __init__(
+        self,
+        vec_env: BaseVecEnv,
+        obs_space: Optional[spaces.Space] = None,
+        state_space: Optional[spaces.Space] = None,
+        action_space: Optional[spaces.Space] = None,
+    ):
+        self.vec_env = vec_env
+
+        super().__init__(
+            num_envs=vec_env.num_envs,
+            obs_space=obs_space or vec_env.obs_space,
+            state_space=state_space or vec_env.state_space,
+            action_space=action_space or vec_env.action_space,
+        )
+        self.class_attributes = dict(inspect.getmembers(self.__class__))
+
+    def step_async(self, actions: np.ndarray) -> None:
+        self.vec_env.step_async(actions)
+
+    @abstractmethod
+    def reset(self) -> None:
+        pass
+
+    @abstractmethod
+    def step_wait(self) -> None:
+        pass
+
+    def seed(self, seed: Optional[int] = None) -> Sequence[Union[None, int]]:
+        return self.vec_env.seed(seed)
+
+    def set_options(self,
+                    options: Optional[Union[List[Dict], Dict]] = None) -> None:
+        return self.vec_env.set_options(options)
+
+    def close(self) -> None:
+        return self.vec_env.close()
+
+    def render(self, mode: Optional[str] = None) -> Optional[np.ndarray]:
+        return self.vec_env.render(mode=mode)
+
+    def get_images(self) -> Sequence[Optional[np.ndarray]]:
+        return self.vec_env.get_images()
+
+    def get_attr(self,
+                 attr_name: str,
+                 indices: Union[None, int, Iterable[int]] = None) -> List[Any]:
+        return self.vec_env.get_attr(attr_name, indices)
+
+    def set_attr(
+        self,
+        attr_name: str,
+        value: Any,
+        indices: Union[None, int, Iterable[int]] = None,
+    ) -> None:
+        return self.vec_env.set_attr(attr_name, value, indices)
+
+    def env_method(
+        self,
+        method_name: str,
+        *method_args,
+        indices: Union[None, int, Iterable[int]] = None,
+        **method_kwargs,
+    ) -> List[Any]:
+        return self.vec_env.env_method(method_name,
+                                       *method_args,
+                                       indices=indices,
+                                       **method_kwargs)
+
+    def env_is_wrapped(
+        self,
+        wrapper_class: Type[gym.Wrapper],
+        indices: Union[None, int, Iterable[int]] = None,
+    ) -> List[bool]:
+        return self.vec_env.env_is_wrapped(wrapper_class, indices=indices)
+
+    def __getattr__(self, name: str) -> Any:
+        """Find attribute from wrapped vec_env(s) if this wrapper does not have
+        it.
+
+        Useful for accessing attributes from vec_envs which are wrapped with
+        multiple wrappers which have unique attributes of interest.
+        """
+        blocked_class = self.getattr_depth_check(name, already_found=False)
+        if blocked_class is not None:
+            own_class = f'{type(self).__module__}.{type(self).__name__}'
+            error_str = (
+                f'Error: Recursive attribute lookup for {name} from {own_class} is '
+                f'ambiguous and hides attribute from {blocked_class}')
+            raise AttributeError(error_str)
+
+        return self.getattr_recursive(name)
+
+    def _get_all_attributes(self) -> Dict[str, Any]:
+        """Get all (inherited) instance and class attributes.
+
+        :return: all_attributes
+        """
+        all_attributes = self.__dict__.copy()
+        all_attributes.update(self.class_attributes)
+        return all_attributes
+
+    def getattr_recursive(self, name: str) -> Any:
+        """Recursively check wrappers to find attribute.
+
+        :param name: name of attribute to look for
+        :return: attribute
+        """
+        all_attributes = self._get_all_attributes()
+        if name in all_attributes:  # attribute is present in this wrapper
+            attr = getattr(self, name)
+        elif hasattr(self.vec_env, 'getattr_recursive'):
+            # Attribute not present, child is wrapper. Call getattr_recursive rather than getattr
+            # to avoid a duplicate call to getattr_depth_check.
+            attr = self.vec_env.getattr_recursive(name)
+        else:  # attribute not present, child is an unwrapped VecEnv
+            attr = getattr(self.vec_env, name)
+
+        return attr
+
+    def getattr_depth_check(self, name: str,
+                            already_found: bool) -> Optional[str]:
+        """See base class.
+
+        :return: name of module whose attribute is being shadowed, if any.
+        """
+        all_attributes = self._get_all_attributes()
+        if name in all_attributes and already_found:
+            # this vec_env's attribute is being hidden because of a higher vec_env.
+            shadowed_wrapper_class: Optional[str] = (
+                f'{type(self).__module__}.{type(self).__name__}')
+        elif name in all_attributes and not already_found:
+            # we have found the first reference to the attribute. Now check for duplicates.
+            shadowed_wrapper_class = self.vec_env.getattr_depth_check(
+                name, True)
+        else:
+            # this wrapper does not have the attribute. Keep searching.
+            shadowed_wrapper_class = self.vec_env.getattr_depth_check(
+                name, already_found)
+
+        return shadowed_wrapper_class
 
 
 class CloudpickleWrapper:
