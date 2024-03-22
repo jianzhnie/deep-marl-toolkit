@@ -10,6 +10,10 @@ def get_common_args():
         default='StarCraft2',
         help='The project which env is in',
     )
+    parser.add_argument('--env_id',
+                        type=str,
+                        default='SMAC-v1',
+                        help='the map of the game')
     parser.add_argument('--scenario',
                         type=str,
                         default='3m',
@@ -19,7 +23,13 @@ def get_common_args():
                         default='7',
                         help='Difficulty of the environment.')
     parser.add_argument(
-        '--parallels',
+        '--num_train_envs',
+        type=int,
+        default=10,
+        help='Num of parallel threads running the env',
+    )
+    parser.add_argument(
+        '--num_test_envs',
         type=int,
         default=10,
         help='Num of parallel threads running the env',

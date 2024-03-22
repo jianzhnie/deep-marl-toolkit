@@ -1,10 +1,3 @@
-'''
-Author: jianzhnie
-LastEditors: jianzhnie
-Description: RLToolKit is a flexible and high-efficient reinforcement learning framework.
-Copyright (c) 2022 by jianzhnie@126.com, All Rights Reserved.
-'''
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -15,15 +8,23 @@ class RNNModel(nn.Module):
     def __init__(
         self,
         input_dim: int = None,
+        fc_hidden_dim: int = 64,
+        num_rnn_layers: int = 1,
         rnn_hidden_dim: int = 64,
-        n_actions: int = None,
-    ):
+        dropout: float = 0.0,
+        action_dim: int = None,
+    ) -> None:
         super(RNNModel, self).__init__()
         self.rnn_hidden_dim = rnn_hidden_dim
-
-        self.fc1 = nn.Linear(input_dim, rnn_hidden_dim)
-        self.rnn = nn.GRUCell(rnn_hidden_dim, rnn_hidden_dim)
-        self.fc2 = nn.Linear(rnn_hidden_dim, n_actions)
+        self.fc1 = nn.Linear(input_dim, fc_hidden_dim)
+        self.rnn = nn.GRU(
+            input_size=rnn_hidden_dim,
+            hidden_size=rnn_hidden_dim,
+            num_layers=num_rnn_layers,
+            batch_first=True,
+            dropout=dropout,
+        )
+        self.fc2 = nn.Linear(rnn_hidden_dim, action_dim)
 
     def init_hidden(self):
         # make hidden states on same device as model
@@ -40,5 +41,5 @@ class RNNModel(nn.Module):
         q = self.fc2(h)  # (batch_size, n_actions)
         return q, h
 
-    def update(self, model: nn.Module):
+    def update(self, model: nn.Module) -> None:
         self.load_state_dict(model.state_dict())
