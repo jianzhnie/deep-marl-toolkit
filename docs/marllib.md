@@ -23,8 +23,6 @@ MARLlib 提供了几个突出的关键特点：
 4. **可定制的策略共享：** MARLlib提供了策略共享的分组选项，研究人员也可以创建自己的共享策略。
 5. **访问上千个发布的实验：** 研究人员可以访问上千个已发布的实验，了解其他研究人员如何使用MARLlib。
 
-
-
 ## MARLlib 框架
 
 ## 环境接口
@@ -32,8 +30,6 @@ MARLlib 提供了几个突出的关键特点：
 <img src="https://marllib.readthedocs.io/en/latest/_images/marl_env_right.png" alt="../_images/marl_env_right.png"  />
 
 Agent-Environment Interface in MARLlib
-
-
 
 MARLlib 中的环境接口支持以下功能：
 
@@ -47,7 +43,7 @@ MARLlib 中的环境接口支持以下功能：
 
 第三，与大多数现有的 MARL 框架仅支持智能体和环境之间的同步交互不同，MARLlib 支持异步交互风格。这要归功于RLlib灵活的数据收集机制，不同agent的数据可以通过同步和异步的方式收集和存储。
 
-##  工作流
+## 工作流
 
 ### 第一阶段：预学习
 
@@ -68,8 +64,6 @@ MARLlib 通过实例化环境和智能体模型来开始强化学习过程。随
 ![../_images/rllib_data_flow_right.png](https://marllib.readthedocs.io/en/latest/_images/rllib_data_flow_right.png)
 
 采样和训练阶段
-
-
 
 ### 算法Pipeline
 
