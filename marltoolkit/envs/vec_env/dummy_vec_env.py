@@ -1,14 +1,14 @@
 import warnings
-from collections import OrderedDict
 from copy import deepcopy
-from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
-                    Tuple, Type, Union)
+from typing import (Any, Callable, Dict, Iterable, Iterator, List, Optional,
+                    Sequence, Tuple, Type, Union)
 
 import gymnasium as gym
 import numpy as np
+from gymnasium.vector.utils import concatenate, create_empty_array, iterate
 
 from .base_vec_env import BaseVecEnv
-from .utils import copy_obs_dict, dict_to_obs, is_wrapped, obs_space_info
+from .utils import is_wrapped
 
 
 class DummyVecEnv(BaseVecEnv):
@@ -25,84 +25,154 @@ class DummyVecEnv(BaseVecEnv):
     :raises ValueError: If the same environment instance is passed as the output of two or more different env_fn.
     """
 
-    actions: np.ndarray
-
-    def __init__(self, env_fns: List[Callable[[], gym.Env]]):
+    def __init__(
+        self,
+        env_fns: Iterator[Callable[[], gym.Env]],
+        obs_space: gym.Space = None,
+        state_space: gym.Space = None,
+        action_space: gym.Space = None,
+        copy: bool = True,
+    ) -> None:
+        self.env_fns = env_fns
+        # Initialise all sub-environments
         self.envs = [fn() for fn in env_fns]
-        env = self.envs[0]
-        super().__init__(
-            len(env_fns),
-            env.obs_space,
-            env.state_space,
-            env.action_space,
-        )
-        self.actions = None
-        self.obs_keys, obs_shapes, obs_dtypes = obs_space_info(env.obs_space)
-        self.state_keys, state_shapes, state_dtypes = obs_space_info(
-            env.state_space)
+        # Define core attributes using the sub-environments
+        # As we support `make_vec(spec)` then we can't include a `spec = self.envs[0].spec` as this doesn't guarantee we can actual recreate the vector env.
+        self.num_envs = len(self.envs)
+        self.metadata = self.envs[0].metadata
+        self.render_mode = self.envs[0].render_mode
 
-        self.buf_obs = OrderedDict([(
-            k,
-            np.zeros((self.num_envs, *tuple(obs_shapes[k])),
-                     dtype=obs_dtypes[k]),
-        ) for k in self.obs_keys])
-        self.buf_state = OrderedDict([(
-            k,
-            np.zeros((self.num_envs, *tuple(state_shapes[k])),
-                     dtype=state_dtypes[k]),
-        ) for k in self.state_keys])
-        self.buf_dones = np.zeros((self.num_envs, ), dtype=bool)
-        self.buf_rews = np.zeros((self.num_envs, ), dtype=np.float32)
+        if (obs_space is None) or (action_space is None):
+            obs_space = obs_space or self.envs[0].obs_space
+            state_space = state_space or self.envs[0].state_space
+            action_space = action_space or self.envs[0].action_space
+
+        super().__init__(
+            num_envs=len(env_fns),
+            obs_space=obs_space,
+            state_space=state_space,
+            action_space=action_space,
+        )
+        self._check_spaces()
+
+        self._actions = None
+        self.buf_obs = create_empty_array(self.single_obs_space,
+                                          n=self.num_envs,
+                                          fn=np.zeros)
+        self.buf_state = create_empty_array(self.single_state_space,
+                                            n=self.num_envs,
+                                            fn=np.zeros)
+        self.buf_rewards = np.zeros((self.num_envs, ), dtype=np.float32)
+        self.buf_terminateds = np.zeros((self.num_envs, ), dtype=np.bool_)
+        self.buf_truncateds = np.zeros((self.num_envs, ), dtype=np.bool_)
+        self.buf_dones = np.zeros((self.num_envs, ), dtype=np.bool_)
         self.buf_infos: List[Dict[str,
                                   Any]] = [{} for _ in range(self.num_envs)]
-        self.metadata = env.metadata
+        self.copy = copy
+        self.metadata = self.envs[0].metadata
 
     def step_async(self, actions: Union[np.ndarray, List]) -> None:
-        self.actions = actions
+        self._actions = iterate(self.action_space, actions)
 
     def step_wait(self):
-        for env_idx in range(self.num_envs):
+        observations, states = [], []
+        for env_idx, (env, action) in enumerate(zip(self.envs, self._actions)):
             (
                 obs,
                 state,
-                self.buf_rews[env_idx],
-                terminated,
+                reward,
+                terminaled,
                 truncated,
-                self.buf_infos[env_idx],
-            ) = self.envs[env_idx].step(self.actions[env_idx])
-            self.buf_dones[env_idx] = terminated or truncated
-            self.buf_infos[env_idx]['TimeLimit.truncated'] = (truncated and
-                                                              not terminated)
-            if self.buf_dones[env_idx]:
-                # save final observation where user can get it, then reset
-                self.buf_infos[env_idx]['terminal_observation'] = obs
-                obs, self.reset_infos[env_idx] = self.envs[env_idx].reset()
+                info,
+            ) = env.step(action)
 
-            self._save_obs(env_idx, obs)
-            self._save_state(env_idx, state)
+            done = terminaled or truncated
+            self.buf_dones[env_idx] = done
+            self.buf_rewards[env_idx] = reward
+            self.buf_terminateds[env_idx] = terminaled
+            self.buf_truncateds[env_idx] = truncated
+            self.buf_infos[env_idx]['info'] = info
+            if done:
+                old_obs, old_state, old_info = obs, state, info
+                # save final observation where user can get it, then reset
+                self.buf_infos[env_idx]['final_obs'] = old_obs
+                self.buf_infos[env_idx]['final_state'] = old_state
+                self.buf_infos[env_idx]['final_info'] = old_info
+                obs, state, info = env.reset()
+
+            observations.append(obs)
+            states.append(state)
+
+        self.buf_obs = concatenate(self.single_obs_space, observations,
+                                   self.buf_obs)
+        self.buf_state = concatenate(self.single_state_space, states,
+                                     self.buf_state)
 
         return (
-            self._obs_from_buf(),
-            self._state_from_buf(),
-            np.copy(self.buf_rews),
+            deepcopy(self.buf_obs) if self.copy else self.buf_obs,
+            deepcopy(self.buf_state) if self.copy else self.buf_state,
+            np.copy(self.buf_rewards),
             np.copy(self.buf_dones),
             deepcopy(self.buf_infos),
         )
 
+    def reset_wait(
+        self,
+        seed: Optional[Union[int, List[int]]] = None,
+        options: Optional[dict] = None,
+    ):
+        """Waits for the calls triggered by :meth:`reset_async` to finish and
+        returns the results.
+
+        Args:
+            seed: The reset environment seed
+            options: Option information for the environment reset
+
+        Returns:
+            The reset observation of the environment and reset information
+        """
+        if seed is None:
+            seed = [None for _ in range(self.num_envs)]
+        if isinstance(seed, int):
+            seed = [seed + i for i in range(self.num_envs)]
+        assert len(seed) == self.num_envs
+
+        self.buf_terminateds[:] = False
+        self.buf_truncateds[:] = False
+        self.buf_dones[:] = False
+        observations, states = [], []
+
+        for i, (env, single_seed) in enumerate(zip(self.envs, seed)):
+            kwargs = {}
+            if single_seed is not None:
+                kwargs['seed'] = single_seed
+            if options is not None:
+                kwargs['options'] = options
+
+            obs, state, info = env.reset(**kwargs)
+            observations.append(obs)
+            states.append(state)
+            self.buf_infos[i] = info
+
+        self.buf_obs = concatenate(self.single_obs_space, observations,
+                                   self.buf_obs)
+        self.buf_state = concatenate(self.single_obs_space, states,
+                                     self.buf_state)
+        return (
+            (deepcopy(self.buf_obs) if self.copy else self.buf_obs),
+            (deepcopy(self.buf_state) if self.copy else self.buf_state),
+            (deepcopy(self.buf_infos) if self.copy else self.buf_infos),
+        )
+
     def reset(
-        self
+        self,
+        seed: Optional[Union[int, List[int]]] = None,
+        options: Optional[dict] = None,
     ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
-        for env_idx in range(self.num_envs):
-            maybe_options = ({
-                'options': self._options[env_idx]
-            } if self._options[env_idx] else {})
-            obs, self.reset_infos[env_idx] = self.envs[env_idx].reset(
-                seed=self._seeds[env_idx], **maybe_options)
-            self._save_obs(env_idx, obs)
         # Seeds and options are only used once
         self._reset_seeds()
         self._reset_options()
-        return self._obs_from_buf()
+        return self.reset_wait()
 
     def close(self) -> None:
         for env in self.envs:
@@ -124,39 +194,21 @@ class DummyVecEnv(BaseVecEnv):
         """
         return super().render(mode=mode)
 
-    def _save_obs(
-        self,
-        env_idx: int,
-        obs: Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]],
-    ) -> None:
-        for key in self.obs_keys:
-            if key is None:
-                self.buf_obs[key][env_idx] = obs
-            else:
-                self.buf_obs[key][env_idx] = obs[
-                    key]  # type: ignore[call-overload]
+    def seed(self, seed: Optional[Union[int, Sequence[int]]] = None):
+        """Sets the seed in all sub-environments.
 
-    def _save_state(
-        self,
-        env_idx: int,
-        obs: Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]],
-    ) -> None:
-        for key in self.state_keys:
-            if key is None:
-                self.buf_state[key][env_idx] = obs
-            else:
-                self.buf_state[key][env_idx] = obs[
-                    key]  # type: ignore[call-overload]
+        Args:
+            seed: The seed
+        """
+        super().seed(seed=seed)
+        if seed is None:
+            seed = [None for _ in range(self.num_envs)]
+        if isinstance(seed, int):
+            seed = [seed + i for i in range(self.num_envs)]
+        assert len(seed) == self.num_envs
 
-    def _obs_from_buf(
-        self,
-    ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
-        return dict_to_obs(self.obs_space, copy_obs_dict(self.buf_obs))
-
-    def _state_from_buf(
-        self,
-    ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
-        return dict_to_obs(self.state_space, copy_obs_dict(self.buf_state))
+        for env, single_seed in zip(self.envs, seed):
+            env.seed(single_seed)
 
     def get_attr(self,
                  attr_name: str,
@@ -204,3 +256,21 @@ class DummyVecEnv(BaseVecEnv):
             self, indices: Union[None, int, Iterable[int]]) -> List[gym.Env]:
         indices = self._get_indices(indices)
         return [self.envs[i] for i in indices]
+
+    def _check_spaces(self) -> bool:
+        """Check that each of the environments obs and action spaces are
+        equivalent to the single obs and action space."""
+        for env in self.envs:
+            if not (env.obs_space == self.single_obs_space):
+                raise RuntimeError(
+                    f'Some environments have an observation space different from `{self.single_obs_space}`. '
+                    'In order to batch observations, the observation spaces from all environments must be equal.'
+                )
+
+            if not (env.action_space == self.single_action_space):
+                raise RuntimeError(
+                    f'Some environments have an action space different from `{self.single_action_space}`. '
+                    'In order to batch actions, the action spaces from all environments must be equal.'
+                )
+
+        return True

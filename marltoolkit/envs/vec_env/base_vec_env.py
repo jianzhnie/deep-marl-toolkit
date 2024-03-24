@@ -9,6 +9,7 @@ import cloudpickle
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+from gymnasium.vector.utils.spaces import batch_space
 
 from marltoolkit.utils.util import tile_images
 
@@ -33,11 +34,20 @@ class BaseVecEnv(ABC):
         state_space: spaces.Space,
         action_space: spaces.Space,
     ) -> None:
-        self.closed = False
         self.num_envs = num_envs
-        self.obs_space = obs_space
-        self.state_space = state_space
-        self.action_space = action_space
+        self.obs_space = batch_space(obs_space, n=num_envs)
+        self.state_space = batch_space(state_space, n=num_envs)
+        self.action_space = batch_space(action_space, n=num_envs)
+
+        self.is_vector_env = True
+        self.closed = False
+
+        # The observation and action spaces of a single environment are
+        # kept in separate properties
+        self.single_obs_space = obs_space
+        self.single_state_space = state_space
+        self.single_action_space = action_space
+
         # store info returned by the reset method
         self.reset_infos: List[Dict[str, Any]] = [{} for _ in range(num_envs)]
         # seeds to be used in the next call to env.reset()
@@ -75,8 +85,48 @@ class BaseVecEnv(ABC):
         """Reset the options that are going to be used at the next reset."""
         self._options = [{} for _ in range(self.num_envs)]
 
+    def reset_async(
+        self,
+        seed: Optional[Union[int, List[int]]] = None,
+        options: Optional[dict] = None,
+    ):
+        """Reset the sub-environments asynchronously.
+
+        This method will return ``None``. A call to :meth:`reset_async` should be followed
+        by a call to :meth:`reset_wait` to retrieve the results.
+
+        Args:
+            seed: The reset seed
+            options: Reset options
+        """
+        pass
+
+    def reset_wait(
+        self,
+        seed: Optional[Union[int, List[int]]] = None,
+        options: Optional[dict] = None,
+    ):
+        """Retrieves the results of a :meth:`reset_async` call.
+
+        A call to this method must always be preceded by a call to :meth:`reset_async`.
+
+        Args:
+            seed: The reset seed
+            options: Reset options
+
+        Returns:
+            The results from :meth:`reset_async`
+
+        Raises:
+            NotImplementedError: VectorEnv does not implement function
+        """
+        raise NotImplementedError('VectorEnv does not implement function')
+
     @abstractmethod
-    def reset(self) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+    def reset(
+            self, seed: int,
+            options: dict[str,
+                          Any]) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """Reset all the environments and return an array of observations, or a
         dict of observation arrays.
 
@@ -86,7 +136,8 @@ class BaseVecEnv(ABC):
         Returns:
             Union[np.ndarray, Dict[str, np.ndarray]]: Observations after reset.
         """
-        raise NotImplementedError
+        self.reset_async(seed=seed, options=options)
+        return self.reset_wait(seed=seed, options=options)
 
     @abstractmethod
     def step_async(self, actions: Union[np.ndarray, List[Any]]) -> None:
@@ -138,21 +189,22 @@ class BaseVecEnv(ABC):
         self.step_async(actions)
         return self.step_wait()
 
-    def close_extras(self) -> None:
+    def close_extras(self, **kwargs: Any) -> None:
         """Clean up the extra resources, beyond what's in this base class.
 
         Only runs when not self.closed.
         """
         raise NotImplementedError
 
-    def close(self) -> None:
+    def close(self, **kwargs: Any) -> None:
         """Close the vectorized environment.
 
         If the environment is already closed, do nothing.
         """
         if self.closed:
             return
-        self.close_extras()
+
+        self.close_extras(**kwargs)
         self.closed = True
 
     @abstractmethod
@@ -366,8 +418,9 @@ class VecEnvWrapper(BaseVecEnv):
         obs_space: Optional[spaces.Space] = None,
         state_space: Optional[spaces.Space] = None,
         action_space: Optional[spaces.Space] = None,
-    ):
+    ) -> None:
         self.vec_env = vec_env
+        assert isinstance(vec_env, BaseVecEnv)
 
         super().__init__(
             num_envs=vec_env.num_envs,
@@ -377,16 +430,21 @@ class VecEnvWrapper(BaseVecEnv):
         )
         self.class_attributes = dict(inspect.getmembers(self.__class__))
 
-    def step_async(self, actions: np.ndarray) -> None:
-        self.vec_env.step_async(actions)
-
     @abstractmethod
-    def reset(self) -> None:
-        pass
+    def reset(self, seed: int, options: dict[str, Any]) -> None:
+        return self.vec_env.reset(seed=seed, options=options)
+
+    def step_async(self, actions: np.ndarray) -> None:
+        return self.vec_env.step_async(actions)
 
     @abstractmethod
     def step_wait(self) -> None:
-        pass
+        return self.vec_env.step_wait()
+
+    def step(self, actions):
+        """Step through all environments using the actions returning the
+        batched data."""
+        return self.vec_env.step(actions)
 
     def seed(self, seed: Optional[int] = None) -> Sequence[Union[None, int]]:
         return self.vec_env.seed(seed)
@@ -395,8 +453,12 @@ class VecEnvWrapper(BaseVecEnv):
                     options: Optional[Union[List[Dict], Dict]] = None) -> None:
         return self.vec_env.set_options(options)
 
-    def close(self) -> None:
-        return self.vec_env.close()
+    def close_extras(self, **kwargs: Any):
+        """Close all extra resources."""
+        return self.vec_env.close_extras(**kwargs)
+
+    def close(self, **kwargs: Any) -> None:
+        return self.vec_env.close(**kwargs)
 
     def render(self, mode: Optional[str] = None) -> Optional[np.ndarray]:
         return self.vec_env.render(mode=mode)
@@ -435,6 +497,17 @@ class VecEnvWrapper(BaseVecEnv):
         indices: Union[None, int, Iterable[int]] = None,
     ) -> List[bool]:
         return self.vec_env.env_is_wrapped(wrapper_class, indices=indices)
+
+    @property
+    def num_envs(self) -> int:
+        """Gets the wrapped vector environment's num of the sub-
+        environments."""
+        return self.vec_env.num_envs
+
+    @property
+    def render_mode(self):
+        """Returns the `render_mode` from the base environment."""
+        return self.vec_env.render_mode
 
     def __getattr__(self, name: str) -> Any:
         """Find attribute from wrapped vec_env(s) if this wrapper does not have
