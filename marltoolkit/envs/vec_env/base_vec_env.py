@@ -2,8 +2,7 @@ import inspect
 import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import (Any, Dict, Iterable, List, Optional, Sequence, Tuple, Type,
-                    Union)
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import cloudpickle
 import gymnasium as gym
@@ -85,11 +84,7 @@ class BaseVecEnv(ABC):
         """Reset the options that are going to be used at the next reset."""
         self._options = [{} for _ in range(self.num_envs)]
 
-    def reset_async(
-        self,
-        seed: Optional[Union[int, List[int]]] = None,
-        options: Optional[dict] = None,
-    ):
+    def reset_async(self):
         """Reset the sub-environments asynchronously.
 
         This method will return ``None``. A call to :meth:`reset_async` should be followed
@@ -99,13 +94,9 @@ class BaseVecEnv(ABC):
             seed: The reset seed
             options: Reset options
         """
-        pass
+        raise NotImplementedError
 
-    def reset_wait(
-        self,
-        seed: Optional[Union[int, List[int]]] = None,
-        options: Optional[dict] = None,
-    ):
+    def reset_wait(self):
         """Retrieves the results of a :meth:`reset_async` call.
 
         A call to this method must always be preceded by a call to :meth:`reset_async`.
@@ -123,10 +114,7 @@ class BaseVecEnv(ABC):
         raise NotImplementedError('VectorEnv does not implement function')
 
     @abstractmethod
-    def reset(
-            self, seed: int,
-            options: dict[str,
-                          Any]) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+    def reset(self) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """Reset all the environments and return an array of observations, or a
         dict of observation arrays.
 
@@ -136,8 +124,8 @@ class BaseVecEnv(ABC):
         Returns:
             Union[np.ndarray, Dict[str, np.ndarray]]: Observations after reset.
         """
-        self.reset_async(seed=seed, options=options)
-        return self.reset_wait(seed=seed, options=options)
+        self.reset_async()
+        return self.reset_wait()
 
     @abstractmethod
     def step_async(self, actions: Union[np.ndarray, List[Any]]) -> None:
@@ -207,10 +195,58 @@ class BaseVecEnv(ABC):
         self.close_extras(**kwargs)
         self.closed = True
 
+    def _add_info(self, infos: dict, info: dict, env_num: int) -> dict:
+        """Add env info to the info dictionary of the vectorized environment.
+
+        Given the `info` of a single environment add it to the `infos` dictionary
+        which represents all the infos of the vectorized environment.
+        Every `key` of `info` is paired with a boolean mask `_key` representing
+        whether or not the i-indexed environment has this `info`.
+
+        Args:
+            infos (dict): the infos of the vectorized environment
+            info (dict): the info coming from the single environment
+            env_num (int): the index of the single environment
+
+        Returns:
+            infos (dict): the (updated) infos of the vectorized environment
+        """
+        for k in info.keys():
+            if k not in infos:
+                info_array, array_mask = self._init_info_arrays(type(info[k]))
+            else:
+                info_array, array_mask = infos[k], infos[f'_{k}']
+
+            info_array[env_num], array_mask[env_num] = info[k], True
+            infos[k], infos[f'_{k}'] = info_array, array_mask
+        return infos
+
+    def _init_info_arrays(self, dtype: type) -> Tuple[np.ndarray, np.ndarray]:
+        """Initialize the info array.
+
+        Initialize the info array. If the dtype is numeric
+        the info array will have the same dtype, otherwise
+        will be an array of `None`. Also, a boolean array
+        of the same length is returned. It will be used for
+        assessing which environment has info data.
+
+        Args:
+            dtype (type): data type of the info coming from the env.
+
+        Returns:
+            array (np.ndarray): the initialized info array.
+            array_mask (np.ndarray): the initialized boolean array.
+        """
+        if dtype in [int, float, bool] or issubclass(dtype, np.number):
+            array = np.zeros(self.num_envs, dtype=dtype)
+        else:
+            array = np.zeros(self.num_envs, dtype=object)
+            array[:] = None
+        array_mask = np.zeros(self.num_envs, dtype=bool)
+        return array, array_mask
+
     @abstractmethod
-    def get_attr(self,
-                 attr_name: str,
-                 indices: Union[None, int, Iterable[int]] = None) -> List[Any]:
+    def get_attr(self, attr_name: str) -> List[Any]:
         """Return attribute from vectorized environment.
 
         :param attr_name: The name of the attribute whose value to return
@@ -220,12 +256,7 @@ class BaseVecEnv(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def set_attr(
-        self,
-        attr_name: str,
-        value: Any,
-        indices: Union[None, int, Iterable[int]] = None,
-    ) -> None:
+    def set_attr(self, attr_name: str, values: Any) -> None:
         """Set attribute inside vectorized environments.
 
         :param attr_name: The name of attribute to assign new value
@@ -240,7 +271,6 @@ class BaseVecEnv(ABC):
         self,
         method_name: str,
         *method_args,
-        indices: Union[None, int, Iterable[int]] = None,
         **method_kwargs,
     ) -> List[Any]:
         """Call instance methods of vectorized environments.
@@ -253,11 +283,7 @@ class BaseVecEnv(ABC):
         """
         raise NotImplementedError
 
-    def env_is_wrapped(
-        self,
-        wrapper_class: Type[gym.Wrapper],
-        indices: Union[None, int, Iterable[int]] = None,
-    ) -> List[bool]:
+    def env_is_wrapped(self, wrapper_class: Type[gym.Wrapper]) -> List[bool]:
         """Check if environments are wrapped with a given wrapper.
 
         :param method_name: The name of the environment method to invoke.
@@ -389,20 +415,6 @@ class BaseVecEnv(ABC):
         else:
             return None
 
-    def _get_indices(
-            self, indices: Union[None, int, Iterable[int]]) -> Iterable[int]:
-        """Convert a flexibly-typed reference to environment indices to an
-        implied list of indices.
-
-        :param indices: refers to indices of envs.
-        :return: the implied list of indices.
-        """
-        if indices is None:
-            indices = range(self.num_envs)
-        elif isinstance(indices, int):
-            indices = [indices]
-        return indices
-
 
 class VecEnvWrapper(BaseVecEnv):
     """Vectorized environment base class.
@@ -431,8 +443,8 @@ class VecEnvWrapper(BaseVecEnv):
         self.class_attributes = dict(inspect.getmembers(self.__class__))
 
     @abstractmethod
-    def reset(self, seed: int, options: dict[str, Any]) -> None:
-        return self.vec_env.reset(seed=seed, options=options)
+    def reset(self) -> None:
+        return self.vec_env.reset()
 
     def step_async(self, actions: np.ndarray) -> None:
         return self.vec_env.step_async(actions)
@@ -466,37 +478,26 @@ class VecEnvWrapper(BaseVecEnv):
     def get_images(self) -> Sequence[Optional[np.ndarray]]:
         return self.vec_env.get_images()
 
-    def get_attr(self,
-                 attr_name: str,
-                 indices: Union[None, int, Iterable[int]] = None) -> List[Any]:
-        return self.vec_env.get_attr(attr_name, indices)
+    def get_attr(self, attr_name: str) -> List[Any]:
+        return self.vec_env.get_attr(attr_name)
 
-    def set_attr(
-        self,
-        attr_name: str,
-        value: Any,
-        indices: Union[None, int, Iterable[int]] = None,
-    ) -> None:
-        return self.vec_env.set_attr(attr_name, value, indices)
+    def set_attr(self, attr_name: str, values: Any) -> None:
+        return self.vec_env.set_attr(attr_name, values)
 
     def env_method(
         self,
         method_name: str,
         *method_args,
-        indices: Union[None, int, Iterable[int]] = None,
         **method_kwargs,
     ) -> List[Any]:
-        return self.vec_env.env_method(method_name,
-                                       *method_args,
-                                       indices=indices,
+        return self.vec_env.env_method(method_name, *method_args,
                                        **method_kwargs)
 
     def env_is_wrapped(
         self,
         wrapper_class: Type[gym.Wrapper],
-        indices: Union[None, int, Iterable[int]] = None,
     ) -> List[bool]:
-        return self.vec_env.env_is_wrapped(wrapper_class, indices=indices)
+        return self.vec_env.env_is_wrapped(wrapper_class)
 
     @property
     def num_envs(self) -> int:

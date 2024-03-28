@@ -1,14 +1,12 @@
 import warnings
 from copy import deepcopy
-from typing import (Any, Callable, Dict, Iterable, Iterator, List, Optional,
-                    Sequence, Tuple, Type, Union)
+from typing import Any, Callable, Iterator, List, Optional, Sequence, Union
 
 import gymnasium as gym
 import numpy as np
 from gymnasium.vector.utils import concatenate, create_empty_array, iterate
 
 from .base_vec_env import BaseVecEnv
-from .utils import is_wrapped
 
 
 class DummyVecEnv(BaseVecEnv):
@@ -66,16 +64,31 @@ class DummyVecEnv(BaseVecEnv):
         self.buf_terminateds = np.zeros((self.num_envs, ), dtype=np.bool_)
         self.buf_truncateds = np.zeros((self.num_envs, ), dtype=np.bool_)
         self.buf_dones = np.zeros((self.num_envs, ), dtype=np.bool_)
-        self.buf_infos: List[Dict[str,
-                                  Any]] = [{} for _ in range(self.num_envs)]
+
         self.copy = copy
         self.metadata = self.envs[0].metadata
+
+    def seed(self, seed: Optional[Union[int, Sequence[int]]] = None):
+        """Sets the seed in all sub-environments.
+
+        Args:
+            seed: The seed
+        """
+        super().seed(seed=seed)
+        if seed is None:
+            self.seeds_ = [None for _ in range(self.num_envs)]
+        if isinstance(seed, int):
+            self._seeds = [seed + i for i in range(self.num_envs)]
+        assert len(self._seeds) == self.num_envs
+
+        for env, single_seed in zip(self.envs, self._seeds):
+            env.seed(single_seed)
 
     def step_async(self, actions: Union[np.ndarray, List]) -> None:
         self._actions = iterate(self.action_space, actions)
 
     def step_wait(self):
-        observations, states = [], []
+        observations, states, infos = [], [], {}
         for env_idx, (env, action) in enumerate(zip(self.envs, self._actions)):
             (
                 obs,
@@ -91,17 +104,17 @@ class DummyVecEnv(BaseVecEnv):
             self.buf_rewards[env_idx] = reward
             self.buf_terminateds[env_idx] = terminaled
             self.buf_truncateds[env_idx] = truncated
-            self.buf_infos[env_idx]['info'] = info
             if done:
                 old_obs, old_state, old_info = obs, state, info
                 # save final observation where user can get it, then reset
-                self.buf_infos[env_idx]['final_obs'] = old_obs
-                self.buf_infos[env_idx]['final_state'] = old_state
-                self.buf_infos[env_idx]['final_info'] = old_info
+                info['final_obs'] = old_obs
+                info['final_state'] = old_state
+                info['final_info'] = old_info
                 obs, state, info = env.reset()
 
             observations.append(obs)
             states.append(state)
+            infos = self._add_info(infos, info, env_idx)
 
         self.buf_obs = concatenate(self.single_obs_space, observations,
                                    self.buf_obs)
@@ -113,14 +126,10 @@ class DummyVecEnv(BaseVecEnv):
             deepcopy(self.buf_state) if self.copy else self.buf_state,
             np.copy(self.buf_rewards),
             np.copy(self.buf_dones),
-            deepcopy(self.buf_infos),
+            infos,
         )
 
-    def reset_wait(
-        self,
-        seed: Optional[Union[int, List[int]]] = None,
-        options: Optional[dict] = None,
-    ):
+    def reset_wait(self):
         """Waits for the calls triggered by :meth:`reset_async` to finish and
         returns the results.
 
@@ -131,28 +140,22 @@ class DummyVecEnv(BaseVecEnv):
         Returns:
             The reset observation of the environment and reset information
         """
-        if seed is None:
-            seed = [None for _ in range(self.num_envs)]
-        if isinstance(seed, int):
-            seed = [seed + i for i in range(self.num_envs)]
-        assert len(seed) == self.num_envs
-
         self.buf_terminateds[:] = False
         self.buf_truncateds[:] = False
         self.buf_dones[:] = False
-        observations, states = [], []
 
-        for i, (env, single_seed) in enumerate(zip(self.envs, seed)):
-            kwargs = {}
-            if single_seed is not None:
-                kwargs['seed'] = single_seed
-            if options is not None:
-                kwargs['options'] = options
+        observations, states, reset_infos = ([], [], {})
 
-            obs, state, info = env.reset(**kwargs)
+        for env_idx, env in enumerate(self.envs):
+            single_seed = self._seeds[env_idx]
+            maybe_options = ({
+                'options': self._options[env_idx]
+            } if self._options[env_idx] else {})
+
+            obs, state, info = env.reset(seed=single_seed, **maybe_options)
             observations.append(obs)
             states.append(state)
-            self.buf_infos[i] = info
+            reset_infos = self._add_info(reset_infos, info, env_idx)
 
         self.buf_obs = concatenate(self.single_obs_space, observations,
                                    self.buf_obs)
@@ -161,14 +164,10 @@ class DummyVecEnv(BaseVecEnv):
         return (
             (deepcopy(self.buf_obs) if self.copy else self.buf_obs),
             (deepcopy(self.buf_state) if self.copy else self.buf_state),
-            (deepcopy(self.buf_infos) if self.copy else self.buf_infos),
+            (deepcopy(reset_infos) if self.copy else reset_infos),
         )
 
-    def reset(
-        self,
-        seed: Optional[Union[int, List[int]]] = None,
-        options: Optional[dict] = None,
-    ) -> Union[np.ndarray, Dict[str, np.ndarray], Tuple[np.ndarray, ...]]:
+    def reset(self):
         # Seeds and options are only used once
         self._reset_seeds()
         self._reset_options()
@@ -194,68 +193,33 @@ class DummyVecEnv(BaseVecEnv):
         """
         return super().render(mode=mode)
 
-    def seed(self, seed: Optional[Union[int, Sequence[int]]] = None):
-        """Sets the seed in all sub-environments.
-
-        Args:
-            seed: The seed
-        """
-        super().seed(seed=seed)
-        if seed is None:
-            seed = [None for _ in range(self.num_envs)]
-        if isinstance(seed, int):
-            seed = [seed + i for i in range(self.num_envs)]
-        assert len(seed) == self.num_envs
-
-        for env, single_seed in zip(self.envs, seed):
-            env.seed(single_seed)
-
-    def get_attr(self,
-                 attr_name: str,
-                 indices: Union[None, int, Iterable[int]] = None) -> List[Any]:
+    def get_attr(self, attr_name: str) -> List[Any]:
         """Return attribute from vectorized environment (see base class)."""
-        target_envs = self._get_target_envs(indices)
-        return [getattr(env_i, attr_name) for env_i in target_envs]
+        return [getattr(env_i, attr_name) for env_i in self.envs]
 
-    def set_attr(
-        self,
-        attr_name: str,
-        value: Any,
-        indices: Union[None, int, Iterable[int]] = None,
-    ) -> None:
+    def set_attr(self, attr_name: str, values: Any) -> None:
         """Set attribute inside vectorized environments (see base class)."""
-        target_envs = self._get_target_envs(indices)
-        for env_i in target_envs:
-            setattr(env_i, attr_name, value)
+        if not isinstance(values, (list, tuple)):
+            values = [values for _ in range(self.num_envs)]
+        if len(values) != self.num_envs:
+            raise ValueError(
+                'Values must be a list or tuple with length equal to the '
+                f'number of environments. Got `{len(values)}` values for '
+                f'{self.num_envs} environments.')
+        for env, value in zip(self.envs, values):
+            setattr(env, attr_name, value)
 
     def env_method(
         self,
         method_name: str,
         *method_args,
-        indices: Union[None, int, Iterable[int]] = None,
         **method_kwargs,
     ) -> List[Any]:
         """Call instance methods of vectorized environments."""
-        target_envs = self._get_target_envs(indices)
         return [
             getattr(env_i, method_name)(*method_args, **method_kwargs)
-            for env_i in target_envs
+            for env_i in self.envs
         ]
-
-    def env_is_wrapped(
-        self,
-        wrapper_class: Type[gym.Wrapper],
-        indices: Union[None, int, Iterable[int]] = None,
-    ) -> List[bool]:
-        """Check if worker environments are wrapped with a given wrapper."""
-        target_envs = self._get_target_envs(indices)
-        # Import here to avoid a circular import
-        return [is_wrapped(env_i, wrapper_class) for env_i in target_envs]
-
-    def _get_target_envs(
-            self, indices: Union[None, int, Iterable[int]]) -> List[gym.Env]:
-        indices = self._get_indices(indices)
-        return [self.envs[i] for i in indices]
 
     def _check_spaces(self) -> bool:
         """Check that each of the environments obs and action spaces are
