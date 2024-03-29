@@ -1,16 +1,14 @@
 import inspect
-import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import cloudpickle
-import gymnasium as gym
 import numpy as np
-from gymnasium import spaces
+from gymnasium import logger, spaces
 from gymnasium.vector.utils.spaces import batch_space
 
-from marltoolkit.utils.util import tile_images
+__all__ = ['BaseVecEnv', 'VecEnvWrapper', 'CloudpickleWrapper']
 
 
 class BaseVecEnv(ABC):
@@ -38,53 +36,21 @@ class BaseVecEnv(ABC):
         self.state_space = batch_space(state_space, n=num_envs)
         self.action_space = batch_space(action_space, n=num_envs)
 
-        self.is_vector_env = True
-        self.closed = False
-
         # The observation and action spaces of a single environment are
         # kept in separate properties
         self.single_obs_space = obs_space
         self.single_state_space = state_space
         self.single_action_space = action_space
 
-        # store info returned by the reset method
-        self.reset_infos: List[Dict[str, Any]] = [{} for _ in range(num_envs)]
-        # seeds to be used in the next call to env.reset()
-        self._seeds: List[Optional[int]] = [None for _ in range(num_envs)]
-        # options to be used in the next call to env.reset()
-        self._options: List[Dict[str, Any]] = [{} for _ in range(num_envs)]
+        self.closed = False
+        self.seeds = [None] * num_envs
+        self.options = [{}] * num_envs
 
-        try:
-            render_modes = self.get_attr('render_mode')
-        except AttributeError:
-            warnings.warn(
-                'The `render_mode` attribute is not defined in your environment. It will be set to None.'
-            )
-            render_modes = [None for _ in range(num_envs)]
-
-        assert all(
-            render_mode == render_modes[0] for render_mode in render_modes
-        ), 'render_mode mode should be the same for all environments'
-        self.render_mode = render_modes[0]
-
-        render_modes = []
-        if self.render_mode is not None:
-            if self.render_mode == 'rgb_array':
-                render_modes = ['human', 'rgb_array']
-            else:
-                render_modes = [self.render_mode]
-
-        self.metadata = {'render_modes': render_modes}
-
-    def _reset_seeds(self) -> None:
-        """Reset the seeds that are going to be used at the next reset."""
-        self._seeds = [None for _ in range(self.num_envs)]
-
-    def _reset_options(self) -> None:
-        """Reset the options that are going to be used at the next reset."""
-        self._options = [{} for _ in range(self.num_envs)]
-
-    def reset_async(self):
+    def reset_async(
+        self,
+        seed: Optional[Union[int, List[int]]] = None,
+        options: Optional[dict] = None,
+    ):
         """Reset the sub-environments asynchronously.
 
         This method will return ``None``. A call to :meth:`reset_async` should be followed
@@ -96,7 +62,11 @@ class BaseVecEnv(ABC):
         """
         raise NotImplementedError
 
-    def reset_wait(self):
+    def reset_wait(
+        self,
+        seed: Optional[Union[int, List[int]]] = None,
+        options: Optional[dict] = None,
+    ):
         """Retrieves the results of a :meth:`reset_async` call.
 
         A call to this method must always be preceded by a call to :meth:`reset_async`.
@@ -114,7 +84,12 @@ class BaseVecEnv(ABC):
         raise NotImplementedError('VectorEnv does not implement function')
 
     @abstractmethod
-    def reset(self) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+    def reset(
+        self,
+        *,
+        seed: Optional[Union[int, List[int]]] = None,
+        options: Optional[dict] = None,
+    ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """Reset all the environments and return an array of observations, or a
         dict of observation arrays.
 
@@ -124,8 +99,8 @@ class BaseVecEnv(ABC):
         Returns:
             Union[np.ndarray, Dict[str, np.ndarray]]: Observations after reset.
         """
-        self.reset_async()
-        return self.reset_wait()
+        self.reset_async(seed=seed, options=options)
+        return self.reset_wait(seed=seed, options=options)
 
     @abstractmethod
     def step_async(self, actions: Union[np.ndarray, List[Any]]) -> None:
@@ -176,6 +151,27 @@ class BaseVecEnv(ABC):
         """
         self.step_async(actions)
         return self.step_wait()
+
+    def call_async(self, name, *args, **kwargs):
+        """Calls a method name for each parallel environment asynchronously."""
+
+    def call_wait(self, **kwargs) -> List[Any]:  # type: ignore
+        """After calling a method in :meth:`call_async`, this function collects
+        the results."""
+
+    def call(self, name: str, *args, **kwargs) -> List[Any]:
+        """Call a method, or get a property, from each parallel environment.
+
+        Args:
+            name (str): Name of the method or property to call.
+            *args: Arguments to apply to the method call.
+            **kwargs: Keyword arguments to apply to the method call.
+
+        Returns:
+            List of the results of the individual calls to the method or property for each environment.
+        """
+        self.call_async(name, *args, **kwargs)
+        return self.call_wait()
 
     def close_extras(self, **kwargs: Any) -> None:
         """Clean up the extra resources, beyond what's in this base class.
@@ -245,124 +241,27 @@ class BaseVecEnv(ABC):
         array_mask = np.zeros(self.num_envs, dtype=bool)
         return array, array_mask
 
-    @abstractmethod
-    def get_attr(self, attr_name: str) -> List[Any]:
-        """Return attribute from vectorized environment.
+    def get_attr(self, name: str):
+        """Get a property from each parallel environment.
 
-        :param attr_name: The name of the attribute whose value to return
-        :param indices: Indices of envs to get attribute from
-        :return: List of values of 'attr_name' in all environments
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def set_attr(self, attr_name: str, values: Any) -> None:
-        """Set attribute inside vectorized environments.
-
-        :param attr_name: The name of attribute to assign new value
-        :param value: Value to assign to `attr_name`
-        :param indices: Indices of envs to assign value
-        :return:
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def env_method(
-        self,
-        method_name: str,
-        *method_args,
-        **method_kwargs,
-    ) -> List[Any]:
-        """Call instance methods of vectorized environments.
-
-        :param method_name: The name of the environment method to invoke.
-        :param indices: Indices of envs whose method to call
-        :param method_args: Any positional arguments to provide in the call
-        :param method_kwargs: Any keyword arguments to provide in the call
-        :return: List of items returned by the environment's method call
-        """
-        raise NotImplementedError
-
-    def env_is_wrapped(self, wrapper_class: Type[gym.Wrapper]) -> List[bool]:
-        """Check if environments are wrapped with a given wrapper.
-
-        :param method_name: The name of the environment method to invoke.
-        :param indices: Indices of envs whose method to call
-        :param method_args: Any positional arguments to provide in the call
-        :param method_kwargs: Any keyword arguments to provide in the call
-        :return: True if the env is wrapped, False otherwise, for each env queried.
-        """
-        raise NotImplementedError
-
-    def get_images(self) -> Sequence[Optional[np.ndarray]]:
-        """Return RGB images from each environment.
+        Args:
+            name (str): Name of the property to be get from each individual environment.
 
         Returns:
-            List[np.ndarray]: List of RGB images.
+            The property with name
+        """
+        return self.call(name)
+
+    def set_attr(self, name: str, values: Union[list, tuple, object]):
+        """Set a property in each sub-environment.
+
+        Args:
+            name (str): Name of the property to be set in each individual environment.
+            values (list, tuple, or object): Values of the property to be set to. If `values` is a list or
+                tuple, then it corresponds to the values for each individual environment, otherwise a single value
+                is set for all environments.
         """
         raise NotImplementedError
-
-    def render(self, mode: Optional[str] = None) -> Optional[np.ndarray]:
-        """Gym environment rendering.
-
-        :param mode: the rendering type
-        """
-
-        if mode == 'human' and self.render_mode != mode:
-            # Special case, if the render_mode="rgb_array"
-            # we can still display that image using opencv
-            if self.render_mode != 'rgb_array':
-                warnings.warn(
-                    f"You tried to render a VecEnv with mode='{mode}' "
-                    'but the render mode defined when initializing the environment must be '
-                    f"'human' or 'rgb_array', not '{self.render_mode}'.")
-                return None
-
-        elif mode and self.render_mode != mode:
-            warnings.warn(
-                f"""Starting from gymnasium v0.26, render modes are determined during the initialization of the environment.
-                We allow to pass a mode argument to maintain a backwards compatible VecEnv API, but the mode ({mode})
-                has to be the same as the environment render mode ({self.render_mode}) which is not the case."""
-            )
-            return None
-
-        mode = mode or self.render_mode
-
-        if mode is None:
-            warnings.warn(
-                'You tried to call render() but no `render_mode` was passed to the env constructor.'
-            )
-            return None
-
-        # mode == self.render_mode == "human"
-        # In that case, we try to call `self.env.render()` but it might
-        # crash for subprocesses
-        if self.render_mode == 'human':
-            self.env_method('render')
-            return None
-
-        if mode == 'rgb_array' or mode == 'human':
-            # call the render method of the environments
-            images = self.get_images()
-            # Create a big image by tiling images from subprocesses
-            bigimg = tile_images(images)  # type: ignore[arg-type]
-
-            if mode == 'human':
-                # Display it using OpenCV
-                import cv2
-
-                cv2.imshow('vecenv', bigimg[:, :, ::-1])
-                cv2.waitKey(1)
-            else:
-                return bigimg
-
-        else:
-            # Other render modes:
-            # In that case, we try to call `self.env.render()` but it might
-            # crash for subprocesses
-            # and we don't return the values
-            self.env_method('render')
-        return None
 
     def seed(self, seed: Optional[int] = None) -> Sequence[Union[None, int]]:
         """
@@ -381,8 +280,8 @@ class BaseVecEnv(ABC):
             seed = int(
                 np.random.randint(0, np.iinfo(np.uint32).max, dtype=np.uint32))
 
-        self._seeds = [seed + idx for idx in range(self.num_envs)]
-        return self._seeds
+        self.seeds = [seed + idx for idx in range(self.num_envs)]
+        return self.seeds
 
     def set_options(self,
                     options: Optional[Union[List[Dict], Dict]] = None) -> None:
@@ -397,9 +296,9 @@ class BaseVecEnv(ABC):
             options = {}
         # Use deepcopy to avoid side effects
         if isinstance(options, dict):
-            self._options = deepcopy([options] * self.num_envs)
+            self.options = deepcopy([options] * self.num_envs)
         else:
-            self._options = deepcopy(options)
+            self.options = deepcopy(options)
 
     def getattr_depth_check(self, name: str,
                             already_found: bool) -> Optional[str]:
@@ -414,6 +313,11 @@ class BaseVecEnv(ABC):
             return f'{type(self).__module__}.{type(self).__name__}'
         else:
             return None
+
+    def __del__(self):
+        """Closes the vector environment."""
+        if not getattr(self, 'closed', True):
+            self.close()
 
 
 class VecEnvWrapper(BaseVecEnv):
@@ -442,14 +346,18 @@ class VecEnvWrapper(BaseVecEnv):
         )
         self.class_attributes = dict(inspect.getmembers(self.__class__))
 
-    @abstractmethod
-    def reset(self) -> None:
-        return self.vec_env.reset()
+    def reset_async(self, **kwargs):
+        return self.env.reset_async(**kwargs)
+
+    def reset_wait(self, **kwargs):
+        return self.env.reset_wait(**kwargs)
+
+    def reset(self, **kwargs) -> None:
+        return self.vec_env.reset(**kwargs)
 
     def step_async(self, actions: np.ndarray) -> None:
         return self.vec_env.step_async(actions)
 
-    @abstractmethod
     def step_wait(self) -> None:
         return self.vec_env.step_wait()
 
@@ -458,13 +366,6 @@ class VecEnvWrapper(BaseVecEnv):
         batched data."""
         return self.vec_env.step(actions)
 
-    def seed(self, seed: Optional[int] = None) -> Sequence[Union[None, int]]:
-        return self.vec_env.seed(seed)
-
-    def set_options(self,
-                    options: Optional[Union[List[Dict], Dict]] = None) -> None:
-        return self.vec_env.set_options(options)
-
     def close_extras(self, **kwargs: Any):
         """Close all extra resources."""
         return self.vec_env.close_extras(**kwargs)
@@ -472,32 +373,25 @@ class VecEnvWrapper(BaseVecEnv):
     def close(self, **kwargs: Any) -> None:
         return self.vec_env.close(**kwargs)
 
-    def render(self, mode: Optional[str] = None) -> Optional[np.ndarray]:
-        return self.vec_env.render(mode=mode)
+    def seed(self, seed: Optional[int] = None) -> Sequence[Union[None, int]]:
+        return self.vec_env.seed(seed)
 
-    def get_images(self) -> Sequence[Optional[np.ndarray]]:
-        return self.vec_env.get_images()
+    def set_options(self,
+                    options: Optional[Union[List[Dict], Dict]] = None) -> None:
+        return self.vec_env.set_options(options)
 
-    def get_attr(self, attr_name: str) -> List[Any]:
-        return self.vec_env.get_attr(attr_name)
+    def get_attr(self, name: str) -> List[Any]:
+        return self.vec_env.get_attr(name)
 
-    def set_attr(self, attr_name: str, values: Any) -> None:
-        return self.vec_env.set_attr(attr_name, values)
+    def set_attr(self, name: str, values: Any) -> None:
+        return self.vec_env.set_attr(name, values)
 
-    def env_method(
-        self,
-        method_name: str,
-        *method_args,
-        **method_kwargs,
-    ) -> List[Any]:
-        return self.vec_env.env_method(method_name, *method_args,
-                                       **method_kwargs)
+    def call(self, name, *args, **kwargs):
+        return self.env.call(name, *args, **kwargs)
 
-    def env_is_wrapped(
-        self,
-        wrapper_class: Type[gym.Wrapper],
-    ) -> List[bool]:
-        return self.vec_env.env_is_wrapped(wrapper_class)
+    @property
+    def unwrapped(self):
+        return self.env.unwrapped
 
     @property
     def num_envs(self) -> int:
@@ -505,76 +399,18 @@ class VecEnvWrapper(BaseVecEnv):
         environments."""
         return self.vec_env.num_envs
 
-    @property
-    def render_mode(self):
-        """Returns the `render_mode` from the base environment."""
-        return self.vec_env.render_mode
+    def __getattr__(self, name):
+        if name.startswith('_'):
+            raise AttributeError(
+                f"attempted to get missing private attribute '{name}'")
+        logger.warn(
+            f'env.{name} to get variables from other wrappers is deprecated and will be removed in v1.0, '
+            f'to get this variable you can do `env.unwrapped.{name}` for environment variables.'
+        )
+        return getattr(self.env, name)
 
-    def __getattr__(self, name: str) -> Any:
-        """Find attribute from wrapped vec_env(s) if this wrapper does not have
-        it.
-
-        Useful for accessing attributes from vec_envs which are wrapped with
-        multiple wrappers which have unique attributes of interest.
-        """
-        blocked_class = self.getattr_depth_check(name, already_found=False)
-        if blocked_class is not None:
-            own_class = f'{type(self).__module__}.{type(self).__name__}'
-            error_str = (
-                f'Error: Recursive attribute lookup for {name} from {own_class} is '
-                f'ambiguous and hides attribute from {blocked_class}')
-            raise AttributeError(error_str)
-
-        return self.getattr_recursive(name)
-
-    def _get_all_attributes(self) -> Dict[str, Any]:
-        """Get all (inherited) instance and class attributes.
-
-        :return: all_attributes
-        """
-        all_attributes = self.__dict__.copy()
-        all_attributes.update(self.class_attributes)
-        return all_attributes
-
-    def getattr_recursive(self, name: str) -> Any:
-        """Recursively check wrappers to find attribute.
-
-        :param name: name of attribute to look for
-        :return: attribute
-        """
-        all_attributes = self._get_all_attributes()
-        if name in all_attributes:  # attribute is present in this wrapper
-            attr = getattr(self, name)
-        elif hasattr(self.vec_env, 'getattr_recursive'):
-            # Attribute not present, child is wrapper. Call getattr_recursive rather than getattr
-            # to avoid a duplicate call to getattr_depth_check.
-            attr = self.vec_env.getattr_recursive(name)
-        else:  # attribute not present, child is an unwrapped VecEnv
-            attr = getattr(self.vec_env, name)
-
-        return attr
-
-    def getattr_depth_check(self, name: str,
-                            already_found: bool) -> Optional[str]:
-        """See base class.
-
-        :return: name of module whose attribute is being shadowed, if any.
-        """
-        all_attributes = self._get_all_attributes()
-        if name in all_attributes and already_found:
-            # this vec_env's attribute is being hidden because of a higher vec_env.
-            shadowed_wrapper_class: Optional[str] = (
-                f'{type(self).__module__}.{type(self).__name__}')
-        elif name in all_attributes and not already_found:
-            # we have found the first reference to the attribute. Now check for duplicates.
-            shadowed_wrapper_class = self.vec_env.getattr_depth_check(
-                name, True)
-        else:
-            # this wrapper does not have the attribute. Keep searching.
-            shadowed_wrapper_class = self.vec_env.getattr_depth_check(
-                name, already_found)
-
-        return shadowed_wrapper_class
+    def __del__(self):
+        self.env.__del__()
 
 
 class CloudpickleWrapper:
