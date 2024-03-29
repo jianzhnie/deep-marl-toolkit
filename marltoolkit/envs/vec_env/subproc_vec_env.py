@@ -3,7 +3,7 @@ import sys
 import time
 from copy import deepcopy
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, List, Optional, Union
 
 import gymnasium as gym
 import numpy as np
@@ -26,7 +26,12 @@ class AsyncState(Enum):
 
 
 class SubprocVecEnv(BaseVecEnv):
-    """Creates a multiprocess vectorized wrapper for multiple environments,
+    """Vectorized environment that runs multiple environments in parallel.
+
+    It uses ``multiprocessing`` processes, and pipes for communication.
+
+
+    Creates a multiprocess vectorized wrapper for multiple environments,
     distributing each environment to its own process, allowing significant
     speed up when the environment is computationally complex.
 
@@ -43,10 +48,30 @@ class SubprocVecEnv(BaseVecEnv):
         ``if __name__ == "__main__":`` block.
         For more information, see the multiprocessing documentation.
 
-    :param env_fns: Environments to run in subprocesses
-    :param start_method: method used to start the subprocesses.
+    Args:
+        env_fns: Environments to run in subprocesses
+        observation_space: Observation space of a single environment. If ``None``,
+                then the observation space of the first environment is taken.
+        state_space: State space of a single environment. If ``None``, then the state space of the first environment is taken.
+        action_space: Action space of a single environment. If ``None``, then the action space of the first environment is taken.
+        start_method: method used to start the subprocesses.
            Must be one of the methods returned by multiprocessing.get_all_start_methods().
            Defaults to 'forkserver' on available platforms, and 'spawn' otherwise.
+        shared_memory: If ``True``, then the observations from the worker processes are communicated back through
+                shared variables. This can improve the efficiency if the observations are large (e.g. images).
+        copy: If ``True``, then the :meth:`~SubprocVectorEnv.reset` and :meth:`~SubprocVectorEnv.step` methods
+                return a copy of the observations.
+
+    Warnings:
+        worker is an advanced mode option. It provides a high degree of flexibility and a high chance
+        to shoot yourself in the foot; thus, if you are writing your own worker, it is recommended to start
+        from the code for ``_worker`` (or ``_worker_shared_memory``) method, and add changes.
+
+    Raises:
+        RuntimeError: If the observation space of some sub-environment does not match observation_space
+            (or, by default, the observation space of the first sub-environment).
+        ValueError: If observation_space is a custom space (i.e. not a default space in Gym,
+            such as gymnasium.spaces.Box, gymnasium.spaces.Discrete, or gymnasium.spaces.Dict) and shared_memory is True.
     """
 
     def __init__(
@@ -74,7 +99,8 @@ class SubprocVecEnv(BaseVecEnv):
         ctx = mp.get_context(start_method)
 
         dummy_env = env_fns[0]()
-        if (obs_space is None) or (action_space is None):
+        if (obs_space is None) or (state_space is None) or (action_space is
+                                                            None):
             obs_space = obs_space or dummy_env.obs_space
             state_space = state_space or dummy_env.state_space
             action_space = action_space or dummy_env.action_space
@@ -82,7 +108,7 @@ class SubprocVecEnv(BaseVecEnv):
         dummy_env.close()
         del dummy_env
 
-        super().__init__(len(env_fns), obs_space, state_space, action_space)
+        super().__init__(self.num_envs, obs_space, state_space, action_space)
 
         if self.shared_memory:
             try:
@@ -232,8 +258,8 @@ class SubprocVecEnv(BaseVecEnv):
 
         infos = {}
         obs_lst, state_lst, info_data = zip(*results)
-        for i, info in enumerate(info_data):
-            infos = self._add_info(infos, info, i)
+        for idx, info in enumerate(info_data):
+            infos = self._add_info(infos, info, idx)
 
         if not self.shared_memory:
             self.observations = concatenate(self.single_obs_space, obs_lst,
@@ -247,18 +273,44 @@ class SubprocVecEnv(BaseVecEnv):
         )
 
     def step_async(self, actions: np.ndarray) -> None:
+        """Send the calls to :obj:`step` to each sub-environment.
+
+        Args:
+            actions: Batch of actions. element of :attr:`~VectorEnv.action_space`
+
+        Raises:
+            ClosedEnvironmentError: If the environment was closed (if :meth:`close` was previously called).
+            AlreadyPendingCallError: If the environment is already waiting for a pending call to another
+                method (e.g. :meth:`reset_async`). This can be caused by two consecutive
+                calls to :meth:`step_async`, with no call to :meth:`step_wait` in
+                between.
+        """
         self._assert_is_running()
         if self._state != AsyncState.DEFAULT:
             raise AlreadyPendingCallError(
                 f'Calling `step_async` while waiting for a pending call to `{self._state.value}` to complete.',
                 self._state.value,
             )
+
         actions = iterate(self.action_space, actions)
         for pipe, action in zip(self.parent_pipes, actions):
             pipe.send(('step', action))
         self._state = AsyncState.WAITING_STEP
 
     def step_wait(self, timeout: Optional[Union[int, float]] = None):
+        """Wait for the calls to :obj:`step` in each sub-environment to finish.
+
+        Args:
+            timeout: Number of seconds before the call to :meth:`step_wait` times out. If ``None``, the call to :meth:`step_wait` never times out.
+
+        Returns:
+             The batched environment step information, (obs, reward, terminated, truncated, info)
+
+        Raises:
+            ClosedEnvironmentError: If the environment was closed (if :meth:`close` was previously called).
+            NoAsyncCallError: If :meth:`step_wait` was called without any prior call to :meth:`step_async`.
+            TimeoutError: If :meth:`step_wait` timed out.
+        """
         self._assert_is_running()
         if self._state != AsyncState.WAITING_STEP:
             raise NoAsyncCallError(
@@ -272,7 +324,7 @@ class SubprocVecEnv(BaseVecEnv):
                 f'The call to `step_wait` has timed out after {timeout} second(s).'
             )
 
-        obs_list, state_list, rewards, terminateds, truncateds, infos = (
+        obs_list, state_list, rewards, dones, infos = (
             [],
             [],
             [],
@@ -287,11 +339,11 @@ class SubprocVecEnv(BaseVecEnv):
             if success:
                 obs, state, rew, terminated, truncated, info = result
 
+                done = terminated or truncated
                 obs_list.append(obs)
                 state_list.append(state)
                 rewards.append(rew)
-                terminateds.append(terminated)
-                truncateds.append(truncated)
+                dones.append(done)
                 infos = self._add_info(infos, info, idx)
 
         self._raise_if_errors(successes)
@@ -302,12 +354,16 @@ class SubprocVecEnv(BaseVecEnv):
                 obs_list,
                 self.observations,
             )
+            self.states = concatenate(
+                self.single_state_space,
+                state_list,
+                self.states,
+            )
         return (
             deepcopy(self.observations) if self.copy else self.observations,
             deepcopy(self.states) if self.copy else self.states,
             np.array(rewards),
-            np.array(terminateds, dtype=np.bool_),
-            np.array(truncateds, dtype=np.bool_),
+            np.array(dones, dtype=np.bool_),
             infos,
         )
 
@@ -432,7 +488,18 @@ class SubprocVecEnv(BaseVecEnv):
         name: str,
         values: Any,
     ) -> None:
-        """Set attribute inside vectorized environments (see base class)."""
+        """Sets an attribute of the sub-environments.
+
+        Args:
+            name: Name of the property to be set in each individual environment.
+            values: Values of the property to be set to. If ``values`` is a list or
+                tuple, then it corresponds to the values for each individual
+                environment, otherwise a single value is set for all environments.
+
+        Raises:
+            ValueError: Values must be a list or tuple with length equal to the number of environments.
+            AlreadyPendingCallError: Calling `set_attr` while waiting for a pending call to complete.
+        """
         self._assert_is_running()
         if not isinstance(values, (list, tuple)):
             values = [values for _ in range(self.num_envs)]
@@ -529,14 +596,13 @@ def _worker(
     env = env_fn_wrapper.x()
     assert obs_buf is None
     assert state_buf is None
-    reset_info: Optional[Dict[str, Any]] = {}
     while True:
         try:
             command, data = pipe.recv()
 
             if command == 'reset':
-                obs, state, reset_info = env.reset(**data)
-                pipe.send(((obs, state, reset_info), True))
+                obs, state, info = env.reset(**data)
+                pipe.send(((obs, state, info), True))
 
             elif command == 'step':
                 (obs, state, reward, terminated, truncated,
@@ -549,7 +615,7 @@ def _worker(
                     info['final_obs'] = old_obs
                     info['final_state'] = old_state
                     info['final_info'] = old_info
-                pipe.send(((obs, state, reward, done, info, reset_info), True))
+                pipe.send(((obs, state, reward, done, info), True))
 
             elif command == 'seed':
                 env.seed(data)
@@ -619,7 +685,7 @@ def _shareworker(
                 write_to_shared_memory(obs_space, index, obs, obs_buf)
                 write_to_shared_memory(state_space, index, state, state_buf)
 
-                pipe.send((((obs, state, info), True)))
+                pipe.send(((None, None, info), True))
 
             if command == 'step':
                 obs, state, reward, terminated, truncated, info = env.step(
@@ -634,7 +700,7 @@ def _shareworker(
                 write_to_shared_memory(obs_space, index, obs, obs_buf)
                 write_to_shared_memory(state_space, index, state, state_buf)
 
-                pipe.send(((obs, state, reward, done, info), True))
+                pipe.send(((None, None, reward, done, info), True))
 
             elif command == 'seed':
                 env.seed(data)
