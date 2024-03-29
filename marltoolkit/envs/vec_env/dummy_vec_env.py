@@ -108,9 +108,14 @@ class DummyVecEnv(BaseVecEnv):
         observations, states, reset_infos = ([], [], {})
 
         for env_idx, env in enumerate(self.envs):
+            kwargs = {}
             single_seed = self.seeds[env_idx]
-            maybe_options = options[env_idx] if options is not None else None
-            obs, state, info = env.reset(seed=single_seed, **maybe_options)
+            if single_seed is not None:
+                kwargs['seed'] = single_seed
+            if options is not None:
+                kwargs['options'] = options
+
+            obs, state, info = env.reset(**kwargs)
             observations.append(obs)
             states.append(state)
             reset_infos = self._add_info(reset_infos, info, env_idx)

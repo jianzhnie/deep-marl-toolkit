@@ -1,5 +1,5 @@
 import inspect
-from abc import ABC, abstractmethod
+from abc import ABC
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -60,7 +60,7 @@ class BaseVecEnv(ABC):
             seed: The reset seed
             options: Reset options
         """
-        raise NotImplementedError
+        pass
 
     def reset_wait(
         self,
@@ -83,7 +83,6 @@ class BaseVecEnv(ABC):
         """
         raise NotImplementedError('VectorEnv does not implement function')
 
-    @abstractmethod
     def reset(
         self,
         *,
@@ -102,7 +101,6 @@ class BaseVecEnv(ABC):
         self.reset_async(seed=seed, options=options)
         return self.reset_wait(seed=seed, options=options)
 
-    @abstractmethod
     def step_async(self, actions: Union[np.ndarray, List[Any]]) -> None:
         """Tell all the environments to start taking a step with the given
         actions.
@@ -113,9 +111,7 @@ class BaseVecEnv(ABC):
         Args:
             actions: Actions to take in each environment.
         """
-        raise NotImplementedError
 
-    @abstractmethod
     def step_wait(
         self,
     ) -> Tuple[Union[np.ndarray, Dict[str, np.ndarray]], np.ndarray,
@@ -178,7 +174,7 @@ class BaseVecEnv(ABC):
 
         Only runs when not self.closed.
         """
-        raise NotImplementedError
+        pass
 
     def close(self, **kwargs: Any) -> None:
         """Close the vectorized environment.

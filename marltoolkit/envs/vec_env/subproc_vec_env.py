@@ -83,8 +83,6 @@ class SubprocVecEnv(BaseVecEnv):
         del dummy_env
 
         super().__init__(len(env_fns), obs_space, state_space, action_space)
-        print('*' * 100)
-        print(self.single_action_space)
 
         if self.shared_memory:
             try:
@@ -97,7 +95,7 @@ class SubprocVecEnv(BaseVecEnv):
                 self.observations = read_from_shared_memory(
                     self.single_obs_space, _obs_buffer, n=self.num_envs)
                 self.states = read_from_shared_memory(self.single_state_space,
-                                                      _obs_buffer,
+                                                      _state_buffer,
                                                       n=self.num_envs)
             except CustomSpaceError as e:
                 raise ValueError(
@@ -125,9 +123,9 @@ class SubprocVecEnv(BaseVecEnv):
 
                 args = (
                     idx,
-                    CloudpickleWrapper(env_fn),
                     child_pipe,
                     parent_pipe,
+                    CloudpickleWrapper(env_fn),
                     _obs_buffer,
                     _state_buffer,
                     self.error_queue,
@@ -522,34 +520,36 @@ def _worker(
     pipe: mp.connection.Connection,
     parent_pipe: mp.connection.Connection,
     env_fn_wrapper: CloudpickleWrapper,
-    shared_memory: bool,
+    obs_buf: Optional[np.array],
+    state_buf: Optional[np.array],
     error_queue: mp.Queue,
 ) -> None:
     # Import here to avoid a circular import
     parent_pipe.close()
     env = env_fn_wrapper.x()
-    assert shared_memory is None
+    assert obs_buf is None
+    assert state_buf is None
     reset_info: Optional[Dict[str, Any]] = {}
     while True:
         try:
             command, data = pipe.recv()
 
             if command == 'reset':
-                state, obs, reset_info = env.reset(**data)
-                pipe.send((state, obs, reset_info), True)
+                obs, state, reset_info = env.reset(**data)
+                pipe.send(((obs, state, reset_info), True))
 
             elif command == 'step':
-                (state, obs, reward, terminated, truncated,
+                (obs, state, reward, terminated, truncated,
                  info) = env.step(data)
                 done = terminated or truncated
                 if done:
                     old_obs, old_state, old_info = obs, state, info
-                    state, obs, info = env.reset()
+                    obs, state, info = env.reset()
                     # save final obs where user can get it, then reset
                     info['final_obs'] = old_obs
                     info['final_state'] = old_state
                     info['final_info'] = old_info
-                pipe.send((state, obs, reward, done, info, reset_info))
+                pipe.send(((obs, state, reward, done, info, reset_info), True))
 
             elif command == 'seed':
                 env.seed(data)
@@ -557,8 +557,6 @@ def _worker(
 
             elif command == 'close':
                 pipe.send((None, True))
-                env.close()
-                pipe.close()
                 break
 
             elif command == '_call':
@@ -603,7 +601,8 @@ def _shareworker(
     pipe: mp.connection.Connection,
     parent_pipe: mp.connection.Connection,
     env_fn_wrapper: CloudpickleWrapper,
-    shared_memory: bool,
+    obs_buf: Optional[np.array],
+    state_buf: Optional[np.array],
     error_queue: mp.Queue,
 ) -> None:
     parent_pipe.close()
@@ -617,11 +616,10 @@ def _shareworker(
 
             if command == 'reset':
                 obs, state, info = env.reset(**data)
-                write_to_shared_memory(obs_space, index, obs, shared_memory)
-                write_to_shared_memory(state_space, index, state,
-                                       shared_memory)
+                write_to_shared_memory(obs_space, index, obs, obs_buf)
+                write_to_shared_memory(state_space, index, state, state_buf)
 
-                pipe.send(((obs, state, info), True))
+                pipe.send((((obs, state, info), True)))
 
             if command == 'step':
                 obs, state, reward, terminated, truncated, info = env.step(
@@ -633,20 +631,18 @@ def _shareworker(
                     info['final_obs'] = old_obs
                     info['final_state'] = old_state
                     info['final_info'] = old_info
-                write_to_shared_memory(obs_space, index, obs, shared_memory)
-                write_to_shared_memory(state_space, index, state,
-                                       shared_memory)
+                write_to_shared_memory(obs_space, index, obs, obs_buf)
+                write_to_shared_memory(state_space, index, state, state_buf)
 
-                pipe.send((obs, state, reward, done, info), True)
+                pipe.send(((obs, state, reward, done, info), True))
 
             elif command == 'seed':
                 env.seed(data)
                 pipe.send((None, True))
 
             elif command == 'close':
-                pipe.send((None, True))
-                env.close()
                 pipe.close()
+                env.close()
                 break
 
             elif command == '_call':
