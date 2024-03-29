@@ -19,9 +19,19 @@ class DummyVecEnv(BaseVecEnv):
     vectorized environment, but that you want a single environments to train
     with.
 
-    :param env_fns: a list of functions
-        that return environments to vectorize
-    :raises ValueError: If the same environment instance is passed as the output of two or more different env_fn.
+    Args:
+        env_fns: iterable of callable functions that create the environments.
+        observation_space: Observation space of a single environment. If ``None``,
+            then the observation space of the first environment is taken.
+        state_space: State space of a single environment. If ``None``,
+            then the state space of the first environment is taken.
+        action_space: Action space of a single environment. If ``None``,
+            then the action space of the first environment is taken.
+        copy: If ``True``, then the :meth:`reset` and :meth:`step` methods return a copy of the observations.
+
+    Raises:
+        RuntimeError: If the observation space of some sub-environment does not match observation_space
+            (or, by default, the observation space of the first sub-environment).
     """
 
     def __init__(
@@ -44,7 +54,7 @@ class DummyVecEnv(BaseVecEnv):
             action_space = action_space or self.envs[0].action_space
 
         super().__init__(
-            num_envs=len(env_fns),
+            num_envs=self.num_envs,
             obs_space=obs_space,
             state_space=state_space,
             action_space=action_space,
@@ -59,8 +69,6 @@ class DummyVecEnv(BaseVecEnv):
                                             n=self.num_envs,
                                             fn=np.zeros)
         self.buf_rewards = np.zeros((self.num_envs, ), dtype=np.float32)
-        self.buf_terminateds = np.zeros((self.num_envs, ), dtype=np.bool_)
-        self.buf_truncateds = np.zeros((self.num_envs, ), dtype=np.bool_)
         self.buf_dones = np.zeros((self.num_envs, ), dtype=np.bool_)
         self.copy = copy
 
@@ -101,11 +109,8 @@ class DummyVecEnv(BaseVecEnv):
             self.seeds = [seed + i for i in range(self.num_envs)]
         assert len(self.seeds) == self.num_envs
 
-        self.buf_terminateds[:] = False
-        self.buf_truncateds[:] = False
         self.buf_dones[:] = False
-
-        observations, states, reset_infos = ([], [], {})
+        observations, states, infos = ([], [], {})
 
         for env_idx, env in enumerate(self.envs):
             kwargs = {}
@@ -118,7 +123,7 @@ class DummyVecEnv(BaseVecEnv):
             obs, state, info = env.reset(**kwargs)
             observations.append(obs)
             states.append(state)
-            reset_infos = self._add_info(reset_infos, info, env_idx)
+            infos = self._add_info(infos, info, env_idx)
 
         self.buf_obs = concatenate(self.single_obs_space, observations,
                                    self.buf_obs)
@@ -127,13 +132,21 @@ class DummyVecEnv(BaseVecEnv):
         return (
             (deepcopy(self.buf_obs) if self.copy else self.buf_obs),
             (deepcopy(self.buf_state) if self.copy else self.buf_state),
-            (deepcopy(reset_infos) if self.copy else reset_infos),
+            (deepcopy(infos) if self.copy else infos),
         )
 
     def step_async(self, actions: Union[np.ndarray, List]) -> None:
+        """Sets :attr:`_actions` for use by the :meth:`step_wait` by converting
+        the ``actions`` to an iterable version."""
         self._actions = iterate(self.action_space, actions)
 
     def step_wait(self):
+        """Steps through each of the environments returning the batched
+        results.
+
+        Returns:
+            The batched environment step results
+        """
         observations, states, infos = [], [], {}
         for env_idx, (env, action) in enumerate(zip(self.envs, self._actions)):
             (
@@ -148,8 +161,6 @@ class DummyVecEnv(BaseVecEnv):
             done = terminaled or truncated
             self.buf_dones[env_idx] = done
             self.buf_rewards[env_idx] = reward
-            self.buf_terminateds[env_idx] = terminaled
-            self.buf_truncateds[env_idx] = truncated
             if done:
                 old_obs, old_state, old_info = obs, state, info
                 # save final observation where user can get it, then reset
@@ -201,12 +212,18 @@ class DummyVecEnv(BaseVecEnv):
         for env in self.envs:
             env.close()
 
-    def get_attr(self, name: str) -> List[Any]:
-        """Return attribute from vectorized environment (see base class)."""
-        return [getattr(env_i, name) for env_i in self.envs]
-
     def set_attr(self, name: str, values: Union[list, tuple, Any]) -> None:
-        """Set attribute inside vectorized environments (see base class)."""
+        """Sets an attribute of the sub-environments.
+
+        Args:
+            name: The property name to change
+            values: Values of the property to be set to. If ``values`` is a list or
+                tuple, then it corresponds to the values for each individual
+                environment, otherwise, a single value is set for all environments.
+
+        Raises:
+            ValueError: Values must be a list or tuple with length equal to the number of environments.
+        """
         if not isinstance(values, (list, tuple)):
             values = [values for _ in range(self.num_envs)]
         if len(values) != self.num_envs:

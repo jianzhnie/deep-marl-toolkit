@@ -12,16 +12,50 @@ __all__ = ['BaseVecEnv', 'VecEnvWrapper', 'CloudpickleWrapper']
 
 
 class BaseVecEnv(ABC):
-    """Abstract base class for vectorized environments.
+    """Base class for vectorized environments to run multiple independent
+    copies of the same environment in parallel.
 
-    This class defines the interface for interacting with a vectorized environment,
-    where multiple environments can be stepped in parallel.
+    Vector environments can provide a linear speed-up in the steps taken per second through sampling multiple
+    sub-environments at the same time. To prevent terminated environments waiting until all sub-environments have
+    terminated or truncated, the vector environments autoreset sub-environments after they terminate or truncated.
+    As a result, the final step's observation and info are overwritten by the reset's observation and info.
+    Therefore, the observation and info for the final step of a sub-environment is stored in the info parameter,
+    using `"final_observation"` and `"final_info"` respectively. See :meth:`step` for more information.
+
+    The vector environments batch `observations`, `rewards`, `terminations`, `truncations` and `info` for each
+    parallel environment. In addition, :meth:`step` expects to receive a batch of actions for each parallel environment.
+
+    Gymnasium contains two types of Vector environments: :class:`AsyncVectorEnv` and :class:`SyncVectorEnv`.
+
+    The Vector Environments have the additional attributes for users to understand the implementation
+
+    - :attr:`num_envs` - The number of sub-environment in the vector environment
+    - :attr:`obs_space` - The batched observation space of the vector environment
+    - :attr:`state_space` - The batched state space of the vector environment
+    - :attr:`single_obs_space` - The observation space of a single sub-environment
+    - :attr:`single_state_space` - The state space of a single sub-environment
+    - :attr:`action_space` - The batched action space of the vector environment
+    - :attr:`single_action_space` - The action space of a single sub-environment
+    - :attr:`closed (bool)` - Indicates whether the vectorized environment is closed.
+
+
+    Note:
+        The info parameter of :meth:`reset` and :meth:`step` was originally implemented before OpenAI Gym v25 was a list
+        of dictionary for each sub-environment. However, this was modified in OpenAI Gym v25+ and in Gymnasium to a
+        dictionary with a NumPy array for each key. To use the old info style using the :class:`VectorListInfo`.
+
+    Note:
+        To render the sub-environments, use :meth:`call` with "render" arguments. Remember to set the `render_modes`
+        for all the sub-environments during initialization.
+
+    Note:
+        All parallel environments should share the identical observation and action spaces.
+        In other words, a vector of multiple different environments is not supported.
 
     Attributes:
         num_envs (int): Number of environments in the vectorized environment.
         obs_space: The observation space of a single environment.
         action_space: The action space of a single environment.
-        closed (bool): Indicates whether the vectorized environment is closed.
     """
 
     def __init__(
@@ -42,6 +76,7 @@ class BaseVecEnv(ABC):
         self.single_state_space = state_space
         self.single_action_space = action_space
 
+        self.spec = None
         self.closed = False
         self.seeds = [None] * num_envs
         self.options = [{}] * num_envs
@@ -94,6 +129,10 @@ class BaseVecEnv(ABC):
 
         If step_async is still doing work, that work will be cancelled and
         step_wait() should not be called until step_async() is invoked again.
+
+        Args:
+            seed: The environment reset seeds
+            options: If to return the options
 
         Returns:
             Union[np.ndarray, Dict[str, np.ndarray]]: Observations after reset.
@@ -257,7 +296,6 @@ class BaseVecEnv(ABC):
                 tuple, then it corresponds to the values for each individual environment, otherwise a single value
                 is set for all environments.
         """
-        raise NotImplementedError
 
     def seed(self, seed: Optional[int] = None) -> Sequence[Union[None, int]]:
         """
@@ -314,6 +352,17 @@ class BaseVecEnv(ABC):
         """Closes the vector environment."""
         if not getattr(self, 'closed', True):
             self.close()
+
+    def __repr__(self) -> str:
+        """Returns a string representation of the vector environment.
+
+        Returns:
+            A string containing the class name, number of environments and environment spec id
+        """
+        if self.spec is None:
+            return f'{self.__class__.__name__}({self.num_envs})'
+        else:
+            return f'{self.__class__.__name__}({self.spec.id}, {self.num_envs})'
 
 
 class VecEnvWrapper(BaseVecEnv):
@@ -404,6 +453,9 @@ class VecEnvWrapper(BaseVecEnv):
             f'to get this variable you can do `env.unwrapped.{name}` for environment variables.'
         )
         return getattr(self.env, name)
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__}, {self.env}>'
 
     def __del__(self):
         self.env.__del__()
