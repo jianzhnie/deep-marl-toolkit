@@ -1,6 +1,11 @@
-from .env_wrapper import SC2EnvWrapper
-from .multiagentenv import MultiAgentEnv
+from .base_env import MultiAgentEnv
+from .smacv1 import SMACWrapperEnv
+from .vec_env import BaseVecEnv, DummyVecEnv, SubprocVecEnv
 
-# from .wargame_wrapper import GameParams, WarGameSAWrapper
-
-__all__ = ['SC2EnvWrapper', 'MultiAgentEnv']
+__all__ = [
+    'SMACWrapperEnv',
+    'BaseVecEnv',
+    'DummyVecEnv',
+    'SubprocVecEnv',
+    'MultiAgentEnv',
+]

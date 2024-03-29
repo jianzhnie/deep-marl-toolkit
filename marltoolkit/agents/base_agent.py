@@ -1,26 +1,22 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 
 
 class BaseAgent(ABC):
 
-    @abstractmethod
     def reset_agent(self):
         raise NotImplementedError
 
-    @abstractmethod
     def sample(self):
         raise NotImplementedError
 
-    @abstractmethod
     def predict(self):
         raise NotImplementedError
 
-    @abstractmethod
     def learn(self):
         raise NotImplementedError
 
-    def save(self):
+    def save_model(self):
         raise NotImplementedError
 
-    def restore(self):
+    def load_model(self):
         raise NotImplementedError

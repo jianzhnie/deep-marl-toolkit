@@ -26,6 +26,7 @@ class QMixConfig:
     def __init__(
         self,
         mixing_embed_dim: int = 32,
+        fc_hidden_dim: int = 64,
         rnn_hidden_dim: int = 64,
         gamma: float = 0.99,
         exploration_start: float = 1.0,
@@ -43,6 +44,7 @@ class QMixConfig:
 
         # Network architecture parameters
         self.mixing_embed_dim = mixing_embed_dim
+        self.fc_hidden_dim = fc_hidden_dim
         self.rnn_hidden_dim = rnn_hidden_dim
         self.hypernet_layers = hypernet_layers
         self.hypernet_embed_dim = hypernet_embed_dim

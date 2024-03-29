@@ -11,8 +11,8 @@ sys.path.append('../')
 from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.qmix_agent import QMixAgent
-from marltoolkit.data.ma_replaybuffer import ReplayBuffer
-from marltoolkit.envs.env_wrapper import SC2EnvWrapper
+from marltoolkit.data import MaReplayBuffer
+from marltoolkit.envs import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
 from marltoolkit.modules.mixers import QMixerModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
@@ -22,6 +22,14 @@ from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
 
 
 def main():
+    """Main function for running the QMix algorithm.
+
+    This function initializes the necessary configurations, environment, logger, models, and agents.
+    It then runs training episodes and evaluates the agent's performance periodically.
+
+    Returns:
+        None
+    """
     qmix_config = QMixConfig()
     common_args = get_common_args()
     args = argparse.Namespace(**vars(common_args), **vars(qmix_config))
@@ -66,14 +74,13 @@ def main():
     else:  # wandb
         logger.load(writer)
 
-    rpm = ReplayBuffer(
-        max_size=args.replay_buffer_size,
+    rpm = MaReplayBuffer(
+        buffer_size=args.replay_buffer_size,
         episode_limit=args.episode_limit,
         state_shape=args.state_shape,
         obs_shape=args.obs_shape,
         num_agents=args.n_agents,
         num_actions=args.n_actions,
-        batch_size=args.batch_size,
         device=args.device,
     )
 

@@ -4,21 +4,20 @@ import sys
 import time
 
 import torch
-from smac.env import StarCraft2Env
 from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append('../')
 from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.vdn_agent import VDNAgent
-from marltoolkit.data.ma_replaybuffer import ReplayBuffer
-from marltoolkit.envs.env_wrapper import SC2EnvWrapper
+from marltoolkit.data import OffPolicyBufferRNN
 from marltoolkit.modules.actors import RNNModel
 from marltoolkit.modules.mixers import VDNMixer
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
                                                 run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
+from marltoolkit.utils.env_utils import make_vec_env
 
 
 def main():
@@ -28,14 +27,23 @@ def main():
     device = torch.device('cuda') if torch.cuda.is_available(
     ) and args.cuda else torch.device('cpu')
 
-    env = StarCraft2Env(map_name=args.scenario, difficulty=args.difficulty)
+    env, train_envs, test_envs = make_vec_env(
+        env_id=args.env_id,
+        map_name=args.scenario,
+        num_train_envs=args.num_train_envs,
+        num_test_envs=args.num_test_envs,
+        difficulty=args.difficulty,
+    )
 
-    env = SC2EnvWrapper(env)
     args.episode_limit = env.episode_limit
-    args.obs_shape = env.obs_shape
-    args.state_shape = env.state_shape
-    args.n_agents = env.n_agents
+    args.obs_dim = env.obs_shape
+    args.obs_shape = (env.obs_shape, )
+    args.state_shape = (env.state_shape, )
+    args.num_agents = env.num_agents
     args.n_actions = env.n_actions
+    args.action_shape = (env.n_actions, )
+    args.reward_shape = (env.reward_dim, )
+    args.done_shape = (env.done_dim, )
     args.device = device
 
     # init the logger before other steps
@@ -66,21 +74,23 @@ def main():
     else:  # wandb
         logger.load(writer)
 
-    rpm = ReplayBuffer(
-        max_size=args.replay_buffer_size,
+    rpm = OffPolicyBufferRNN(
+        num_envs=args.num_train_envs,
+        buffer_size=args.replay_buffer_size,
+        num_agents=args.num_agents,
         episode_limit=args.episode_limit,
-        state_shape=args.state_shape,
-        obs_shape=args.obs_shape,
-        num_agents=args.n_agents,
-        num_actions=args.n_actions,
-        batch_size=args.batch_size,
+        state_space=args.state_shape,
+        obs_space=args.obs_shape,
+        action_space=args.action_shape,
+        reward_space=args.reward_shape,
+        done_space=args.done_shape,
         device=args.device,
     )
-
     agent_model = RNNModel(
-        input_shape=args.obs_shape,
+        input_dim=args.obs_dim,
+        fc_hidden_dim=args.fc_hidden_dim,
         rnn_hidden_dim=args.rnn_hidden_dim,
-        n_actions=args.n_actions,
+        action_dim=args.n_actions,
     )
 
     mixer_model = VDNMixer()
@@ -88,7 +98,7 @@ def main():
     marl_agent = VDNAgent(
         agent_model=agent_model,
         mixer_model=mixer_model,
-        n_agents=args.n_agents,
+        num_agents=args.num_agents,
         double_q=args.double_q,
         total_steps=args.total_steps,
         gamma=args.gamma,
@@ -104,15 +114,15 @@ def main():
 
     progress_bar = ProgressBar(args.memory_warmup_size)
     while rpm.size() < args.memory_warmup_size:
-        run_train_episode(env, marl_agent, rpm, args)
+        run_train_episode(train_envs, marl_agent, rpm, args)
         progress_bar.update()
 
     steps_cnt = 0
     episode_cnt = 0
     progress_bar = ProgressBar(args.total_steps)
     while steps_cnt < args.total_steps:
-        episode_reward, episode_step, is_win, mean_loss, mean_td_error = run_train_episode(
-            env, marl_agent, rpm, args)
+        episode_reward, episode_step, is_win, mean_loss, mean_td_error = (
+            run_train_episode(train_envs, marl_agent, rpm, args))
         # update episodes and steps
         episode_cnt += 1
         steps_cnt += episode_step
@@ -141,7 +151,7 @@ def main():
 
         if episode_cnt % args.test_log_interval == 0:
             eval_rewards, eval_steps, eval_win_rate = run_evaluate_episode(
-                env, marl_agent, num_eval_episodes=5)
+                test_envs, marl_agent, num_eval_episodes=5)
             text_logger.info(
                 '[Eval], episode: {}, eval_win_rate: {:.2f}, eval_rewards: {:.2f}'
                 .format(episode_cnt, eval_win_rate, eval_rewards))

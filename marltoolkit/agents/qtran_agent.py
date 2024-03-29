@@ -77,21 +77,19 @@ class QTranAgent(object):
 
         self.params = list(self.agent_model.parameters())
         self.params += list(self.mixer_model.parameters())
-        self.optimizer = torch.optim.RMSprop(
-            params=self.params,
-            lr=self.learning_rate,
-            alpha=optim_alpha,
-            eps=optim_eps)
+        self.optimizer = torch.optim.RMSprop(params=self.params,
+                                             lr=self.learning_rate,
+                                             alpha=optim_alpha,
+                                             eps=optim_eps)
 
         self.ep_scheduler = LinearDecayScheduler(exploration_start,
                                                  total_steps * 0.8)
 
         lr_steps = [total_steps * 0.5, total_steps * 0.8]
-        self.lr_scheduler = MultiStepScheduler(
-            start_value=learning_rate,
-            max_steps=total_steps,
-            milestones=lr_steps,
-            decay_factor=0.5)
+        self.lr_scheduler = MultiStepScheduler(start_value=learning_rate,
+                                               max_steps=total_steps,
+                                               milestones=lr_steps,
+                                               decay_factor=0.5)
 
     def reset_agent(self, batch_size=1):
         self._init_hidden_states(batch_size)
@@ -117,8 +115,8 @@ class QTranAgent(object):
         '''
         epsilon = np.random.random()
         if epsilon < self.exploration:
-            available_actions = torch.tensor(
-                available_actions, dtype=torch.float32)
+            available_actions = torch.tensor(available_actions,
+                                             dtype=torch.float32)
             actions_dist = Categorical(available_actions)
             actions = actions_dist.sample().long().cpu().detach().numpy()
 
@@ -138,8 +136,9 @@ class QTranAgent(object):
             actions (np.ndarray):           (n_agents, )
         '''
         obs = torch.tensor(obs, dtype=torch.float32, device=self.device)
-        available_actions = torch.tensor(
-            available_actions, dtype=torch.long, device=self.device)
+        available_actions = torch.tensor(available_actions,
+                                         dtype=torch.long,
+                                         device=self.device)
         agents_q, self.hidden_states = self.agent_model(
             obs, self.hidden_states)
         # mask unavailable actions
@@ -176,8 +175,8 @@ class QTranAgent(object):
 
         # set the actions to torch.Long
         actions_batch = actions_batch.to(self.device, dtype=torch.long)
-        actions_onehot_batch = actions_onehot_batch.to(
-            self.device, dtype=torch.long)
+        actions_onehot_batch = actions_onehot_batch.to(self.device,
+                                                       dtype=torch.long)
 
         # get the batch_size and episode_length
         batch_size = state_batch.shape[0]
@@ -235,15 +234,16 @@ class QTranAgent(object):
         local_hidden_states = local_hidden_states.reshape(
             batch_size, self.n_agents, episode_len, -1).transpose(1, 2)  # btav
 
-        target_local_hidden_states = torch.stack(
-            target_local_hidden_states, dim=1)
+        target_local_hidden_states = torch.stack(target_local_hidden_states,
+                                                 dim=1)
         target_local_hidden_states = target_local_hidden_states.reshape(
             batch_size, self.n_agents, episode_len, -1).transpose(1, 2)  # btav
 
         # Pick the Q-Values for the actions taken by each agent
         # Remove the last dim
-        chosen_action_local_qs = torch.gather(
-            local_qs[:, :-1, :, :], dim=3, index=actions_batch).squeeze(3)
+        chosen_action_local_qs = torch.gather(local_qs[:, :-1, :, :],
+                                              dim=3,
+                                              index=actions_batch).squeeze(3)
 
         # mask unavailable actions
         local_qs_detach = local_qs.clone().detach()
@@ -262,16 +262,17 @@ class QTranAgent(object):
         # Max over target Q-Values
         if self.double_q:
             # Get actions that maximise live Q (for double q-learning)
-            max_actions_current_ = torch.zeros(
-                size=(batch_size, episode_len, self.n_agents, self.n_actions),
-                device=self.device)
+            max_actions_current_ = torch.zeros(size=(batch_size, episode_len,
+                                                     self.n_agents,
+                                                     self.n_actions),
+                                               device=self.device)
             max_actions_current_onehot = max_actions_current_.scatter(
                 3, max_actions_current, 1)
             max_actions_onehot = max_actions_current_onehot
         else:
-            max_actions = torch.zeros(
-                size=(batch_size, episode_len, self.n_agents, self.n_actions),
-                device=self.device)
+            max_actions = torch.zeros(size=(batch_size, episode_len,
+                                            self.n_agents, self.n_actions),
+                                      device=self.device)
             max_actions_onehot = max_actions.scatter(3, target_max_actions, 1)
 
         # Joint-action Q-Value estimates
@@ -298,9 +299,10 @@ class QTranAgent(object):
         # -- Opt Loss --
         # Argmax across the current agents' actions
         if not self.double_q:  # Already computed if we're doing double Q-Learning
-            max_actions_current_ = torch.zeros(
-                size=(batch_size, episode_len, self.n_agents, self.n_actions),
-                device=self.device)
+            max_actions_current_ = torch.zeros(size=(batch_size, episode_len,
+                                                     self.n_agents,
+                                                     self.n_actions),
+                                               device=self.device)
             max_actions_current_onehot = max_actions_current_.scatter(
                 3, max_actions_current, 1)
 

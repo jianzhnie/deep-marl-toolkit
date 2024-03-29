@@ -1,9 +1,9 @@
-'''
+"""
 Author: jianzhnie
 LastEditors: jianzhnie
 Description: RLToolKit is a flexible and high-efficient reinforcement learning framework.
 Copyright (c) 2022 by jianzhnie@126.com, All Rights Reserved.
-'''
+"""
 
 from typing import List
 
@@ -16,15 +16,23 @@ class RNNActor(nn.Module):
 
     def __init__(
         self,
-        input_shape: int = None,
+        input_dim: int = None,
+        fc_hidden_dim: int = 64,
+        num_rnn_layers: int = 1,
         rnn_hidden_dim: int = 64,
         n_actions: int = None,
+        dropout: float = 0.0,
     ):
         super(RNNActor, self).__init__()
         self.rnn_hidden_dim = rnn_hidden_dim
-
-        self.fc1 = nn.Linear(input_shape, rnn_hidden_dim)
-        self.rnn = nn.GRUCell(rnn_hidden_dim, rnn_hidden_dim)
+        self.fc1 = nn.Linear(input_dim, fc_hidden_dim)
+        self.rnn = nn.GRU(
+            input_size=rnn_hidden_dim,
+            hidden_size=rnn_hidden_dim,
+            num_layers=num_rnn_layers,
+            batch_first=True,
+            dropout=dropout,
+        )
         self.fc2 = nn.Linear(rnn_hidden_dim, n_actions)
 
     def init_hidden(self):
@@ -42,7 +50,7 @@ class RNNActor(nn.Module):
         q = self.fc2(h)  # (batch_size, n_actions)
         return q, h
 
-    def update(self, model: nn.Module):
+    def update(self, model: nn.Module) -> None:
         self.load_state_dict(model.state_dict())
 
 
@@ -108,6 +116,6 @@ class RNNNSAgent(nn.Module):
                 q, h = self.agents[i](inputs[:, i], hidden_state[:, i])
                 hiddens.append(h.unsqueeze(1))
                 qs.append(q.unsqueeze(1))
-            return torch.cat(
-                qs, dim=-1).view(-1, q.size(-1)), torch.cat(
-                    hiddens, dim=1)
+            return torch.cat(qs, dim=-1).view(-1,
+                                              q.size(-1)), torch.cat(hiddens,
+                                                                     dim=1)

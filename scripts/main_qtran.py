@@ -12,8 +12,8 @@ sys.path.append('../')
 from configs.arguments import get_common_args
 from configs.qtran_config import QTranConfig
 from marltoolkit.agents.qtran_agent import QTranAgent
-from marltoolkit.data.ma_replaybuffer import ReplayBuffer
-from marltoolkit.envs.env_wrapper import SC2EnvWrapper
+from marltoolkit.data import MaReplayBuffer
+from marltoolkit.envs import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
 from marltoolkit.modules.mixers.qtran_mixer import QTransModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
@@ -31,8 +31,8 @@ def main():
     common_dict = vars(common_args)
     config.update(common_dict)
 
-    env = StarCraft2Env(
-        map_name=config['scenario'], difficulty=config['difficulty'])
+    env = StarCraft2Env(map_name=config['scenario'],
+                        difficulty=config['difficulty'])
 
     env = SC2EnvWrapper(env)
     config['episode_limit'] = env.episode_limit
@@ -54,15 +54,14 @@ def main():
     text_logger = get_root_logger(log_file=log_file, log_level='INFO')
 
     if args.logger == 'wandb':
-        logger = WandbLogger(
-            train_interval=args.train_log_interval,
-            test_interval=args.test_log_interval,
-            update_interval=args.train_log_interval,
-            project=args.project,
-            name=log_name.replace(os.path.sep, '_'),
-            save_interval=1,
-            config=args,
-            entity='jianzhnie')
+        logger = WandbLogger(train_interval=args.train_log_interval,
+                             test_interval=args.test_log_interval,
+                             update_interval=args.train_log_interval,
+                             project=args.project,
+                             name=log_name.replace(os.path.sep, '_'),
+                             save_interval=1,
+                             config=args,
+                             entity='jianzhnie')
     writer = SummaryWriter(tensorboard_log_path)
     writer.add_text('args', str(args))
     if args.logger == 'tensorboard':
@@ -70,27 +69,25 @@ def main():
     else:  # wandb
         logger.load(writer)
 
-    rpm = ReplayBuffer(
-        max_size=config['replay_buffer_size'],
-        episode_limit=config['episode_limit'],
-        state_shape=config['state_shape'],
-        obs_shape=config['obs_shape'],
-        num_agents=config['n_agents'],
-        num_actions=config['n_actions'],
-        batch_size=config['batch_size'],
-        device=device)
+    rpm = MaReplayBuffer(max_size=config['replay_buffer_size'],
+                         episode_limit=config['episode_limit'],
+                         state_shape=config['state_shape'],
+                         obs_shape=config['obs_shape'],
+                         num_agents=config['n_agents'],
+                         num_actions=config['n_actions'],
+                         batch_size=config['batch_size'],
+                         device=device)
 
     agent_model = RNNModel(
         input_shape=config['obs_shape'],
         rnn_hidden_dim=config['rnn_hidden_dim'],
         n_actions=config['n_actions'],
     )
-    mixer_model = QTransModel(
-        n_agents=config['n_agents'],
-        n_actions=config['n_actions'],
-        state_dim=config['state_shape'],
-        rnn_hidden_dim=config['rnn_hidden_dim'],
-        mixing_embed_dim=config['mixing_embed_dim'])
+    mixer_model = QTransModel(n_agents=config['n_agents'],
+                              n_actions=config['n_actions'],
+                              state_dim=config['state_shape'],
+                              rnn_hidden_dim=config['rnn_hidden_dim'],
+                              mixing_embed_dim=config['mixing_embed_dim'])
 
     qmix_agent = QTranAgent(
         agent_model=agent_model,

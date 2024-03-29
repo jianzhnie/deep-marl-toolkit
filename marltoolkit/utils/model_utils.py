@@ -51,8 +51,7 @@ def check_model_method(model, method, algo):
             algo)
     else:
         # check if the specified method is implemented
-        assert hasattr(model, method) and callable(
-            getattr(
-                model, method,
-                None)), "{}'s model needs to implement {} method. \n".format(
-                    algo, method)
+        assert hasattr(model, method) and callable(getattr(
+            model, method,
+            None)), "{}'s model needs to implement {} method. \n".format(
+                algo, method)

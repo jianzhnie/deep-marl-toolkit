@@ -13,7 +13,7 @@ from .base_agent import BaseAgent
 
 
 class QMixAgent(BaseAgent):
-    """ QMIX algorithm
+    """QMIX algorithm
     Args:
         agent_model (nn.Model): agents' local q network for decision making.
         mixer_model (nn.Model): A mixing network which takes local q values as input
@@ -43,7 +43,6 @@ class QMixAgent(BaseAgent):
         optim_eps: float = 0.00001,
         device: str = 'cpu',
     ):
-
         check_model_method(agent_model, 'init_hidden', self.__class__.__name__)
         check_model_method(agent_model, 'forward', self.__class__.__name__)
         if mixer_model is not None:
@@ -83,11 +82,10 @@ class QMixAgent(BaseAgent):
             self.target_mixer_model.to(device)
             self.params += list(self.mixer_model.parameters())
 
-        self.optimizer = torch.optim.RMSprop(
-            params=self.params,
-            lr=self.learning_rate,
-            alpha=optim_alpha,
-            eps=optim_eps)
+        self.optimizer = torch.optim.RMSprop(params=self.params,
+                                             lr=self.learning_rate,
+                                             alpha=optim_alpha,
+                                             eps=optim_eps)
 
         self.ep_scheduler = LinearDecayScheduler(exploration_start,
                                                  total_steps * 0.8)
@@ -97,7 +95,8 @@ class QMixAgent(BaseAgent):
             start_value=learning_rate,
             max_steps=total_steps,
             milestones=lr_steps,
-            decay_factor=0.5)
+            decay_factor=0.5,
+        )
 
     def reset_agent(self, batch_size=1):
         self._init_hidden_states(batch_size)
@@ -114,17 +113,17 @@ class QMixAgent(BaseAgent):
                 0).expand(batch_size, self.n_agents, -1)
 
     def sample(self, obs: torch.Tensor, available_actions: torch.Tensor):
-        ''' sample actions via epsilon-greedy
+        """sample actions via epsilon-greedy
         Args:
             obs (np.ndarray):               (n_agents, obs_shape)
             available_actions (np.ndarray): (n_agents, n_actions)
         Returns:
             actions (np.ndarray): sampled actions of agents
-        '''
+        """
         epsilon = np.random.random()
         if epsilon < self.exploration:
-            available_actions = torch.tensor(
-                available_actions, dtype=torch.float32)
+            available_actions = torch.tensor(available_actions,
+                                             dtype=torch.float32)
             actions_dist = Categorical(available_actions)
             actions = actions_dist.sample().long().cpu().detach().numpy()
 
@@ -136,16 +135,17 @@ class QMixAgent(BaseAgent):
         return actions
 
     def predict(self, obs: torch.Tensor, available_actions: torch.Tensor):
-        '''take greedy actions
+        """take greedy actions
         Args:
             obs (np.ndarray):               (n_agents, obs_shape)
             available_actions (np.ndarray): (n_agents, n_actions)
         Returns:
             actions (np.ndarray):           (n_agents, )
-        '''
+        """
         obs = torch.tensor(obs, dtype=torch.float32, device=self.device)
-        available_actions = torch.tensor(
-            available_actions, dtype=torch.long, device=self.device)
+        available_actions = torch.tensor(available_actions,
+                                         dtype=torch.long,
+                                         device=self.device)
         agents_q, self.hidden_states = self.agent_model(
             obs, self.hidden_states)
         # mask unavailable actions
@@ -158,9 +158,18 @@ class QMixAgent(BaseAgent):
         if self.mixer_model is not None:
             hard_target_update(self.mixer_model, self.target_mixer_model)
 
-    def learn(self, state_batch, actions_batch, reward_batch, terminated_batch,
-              obs_batch, available_actions_batch, filled_batch, **kwargs):
-        '''
+    def learn(
+        self,
+        state_batch: np.ndarray,
+        actions_batch: np.ndarray,
+        reward_batch: np.ndarray,
+        terminated_batch: np.ndarray,
+        obs_batch: np.ndarray,
+        available_actions_batch: np.ndarray,
+        filled_batch: np.ndarray,
+        **kwargs,
+    ):
+        """
         Args:
             state (np.ndarray):                   (batch_size, T, state_shape)
             actions (np.ndarray):                 (batch_size, T, n_agents)
@@ -172,7 +181,7 @@ class QMixAgent(BaseAgent):
         Returns:
             mean_loss (float): train loss
             mean_td_error (float): train TD error
-        '''
+        """
         # update target model
         if self.global_steps % self.update_target_interval == 0:
             self.update_target()
@@ -223,8 +232,9 @@ class QMixAgent(BaseAgent):
 
         # Pick the Q-Values for the actions taken by each agent
         # Remove the last dim
-        chosen_action_local_qs = torch.gather(
-            local_qs[:, :-1, :, :], dim=3, index=actions_batch).squeeze(3)
+        chosen_action_local_qs = torch.gather(local_qs[:, :-1, :, :],
+                                              dim=3,
+                                              index=actions_batch).squeeze(3)
 
         # mask unavailable actions
         target_local_qs[available_actions_batch[:, 1:, :] == 0] = -1e10
@@ -234,8 +244,8 @@ class QMixAgent(BaseAgent):
             # Get actions that maximise live Q (for double q-learning)
             local_qs_detach = local_qs.clone().detach()
             local_qs_detach[available_actions_batch == 0] = -1e10
-            cur_max_actions = local_qs_detach[:, 1:].max(
-                dim=3, keepdim=True)[1]
+            cur_max_actions = local_qs_detach[:, 1:].max(dim=3,
+                                                         keepdim=True)[1]
             target_local_max_qs = torch.gather(
                 target_local_qs, dim=3, index=cur_max_actions).squeeze(3)
         else:
@@ -281,11 +291,13 @@ class QMixAgent(BaseAgent):
 
         return loss.item(), mean_td_error.item()
 
-    def save(self,
-             save_dir: str = None,
-             agent_model_name: str = 'agent_model.th',
-             mixer_model_name: str = 'mixer_model.th',
-             opt_name: str = 'optimizer.th'):
+    def save_model(
+        self,
+        save_dir: str = None,
+        agent_model_name: str = 'agent_model.th',
+        mixer_model_name: str = 'mixer_model.th',
+        opt_name: str = 'optimizer.th',
+    ):
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
         agent_model_path = os.path.join(save_dir, agent_model_name)
@@ -296,11 +308,13 @@ class QMixAgent(BaseAgent):
         torch.save(self.optimizer.state_dict(), optimizer_path)
         print('save model successfully!')
 
-    def restore(self,
-                save_dir: str = None,
-                agent_model_name: str = 'agent_model.th',
-                mixer_model_name: str = 'mixer_model.th',
-                opt_name: str = 'optimizer.th'):
+    def load_model(
+        self,
+        save_dir: str = None,
+        agent_model_name: str = 'agent_model.th',
+        mixer_model_name: str = 'mixer_model.th',
+        opt_name: str = 'optimizer.th',
+    ):
         agent_model_path = os.path.join(save_dir, agent_model_name)
         mixer_model_path = os.path.join(save_dir, mixer_model_name)
         optimizer_path = os.path.join(save_dir, opt_name)

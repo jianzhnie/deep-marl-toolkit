@@ -28,7 +28,7 @@ class VDNAgent(BaseAgent):
         self,
         agent_model: nn.Module = None,
         mixer_model: nn.Module = None,
-        n_agents: int = None,
+        num_agents: int = None,
         double_q: bool = True,
         total_steps: int = 1e6,
         gamma: float = 0.99,
@@ -51,7 +51,7 @@ class VDNAgent(BaseAgent):
         assert isinstance(gamma, float)
         assert isinstance(learning_rate, float)
 
-        self.n_agents = n_agents
+        self.num_agents = num_agents
         self.double_q = double_q
         self.gamma = gamma
         self.learning_rate = learning_rate
@@ -80,21 +80,19 @@ class VDNAgent(BaseAgent):
             self.target_mixer_model.to(device)
             self.params += list(self.mixer_model.parameters())
 
-        self.optimizer = torch.optim.RMSprop(
-            params=self.params,
-            lr=self.learning_rate,
-            alpha=optim_alpha,
-            eps=optim_eps)
+        self.optimizer = torch.optim.RMSprop(params=self.params,
+                                             lr=self.learning_rate,
+                                             alpha=optim_alpha,
+                                             eps=optim_eps)
 
         self.ep_scheduler = LinearDecayScheduler(exploration_start,
                                                  total_steps * 0.8)
 
         lr_steps = [total_steps * 0.5, total_steps * 0.8]
-        self.lr_scheduler = MultiStepScheduler(
-            start_value=learning_rate,
-            max_steps=total_steps,
-            milestones=lr_steps,
-            decay_factor=0.5)
+        self.lr_scheduler = MultiStepScheduler(start_value=learning_rate,
+                                               max_steps=total_steps,
+                                               milestones=lr_steps,
+                                               decay_factor=0.5)
 
     def reset_agent(self, batch_size=1):
         self._init_hidden_states(batch_size)
@@ -103,25 +101,25 @@ class VDNAgent(BaseAgent):
         self.hidden_states = self.agent_model.init_hidden()
         if self.hidden_states is not None:
             self.hidden_states = self.hidden_states.unsqueeze(0).expand(
-                batch_size, self.n_agents, -1)
+                batch_size, self.num_agents, -1)
 
         self.target_hidden_states = self.target_agent_model.init_hidden()
         if self.target_hidden_states is not None:
             self.target_hidden_states = self.target_hidden_states.unsqueeze(
-                0).expand(batch_size, self.n_agents, -1)
+                0).expand(batch_size, self.num_agents, -1)
 
     def sample(self, obs, available_actions):
-        ''' sample actions via epsilon-greedy
+        """sample actions via epsilon-greedy
         Args:
-            obs (np.ndarray):               (n_agents, obs_shape)
-            available_actions (np.ndarray): (n_agents, n_actions)
+            obs (np.ndarray):               (num_agents, obs_shape)
+            available_actions (np.ndarray): (num_agents, n_actions)
         Returns:
             actions (np.ndarray): sampled actions of agents
-        '''
+        """
         epsilon = np.random.random()
         if epsilon < self.exploration:
-            available_actions = torch.tensor(
-                available_actions, dtype=torch.float32)
+            available_actions = torch.tensor(available_actions,
+                                             dtype=torch.float32)
             actions_dist = Categorical(available_actions)
             actions = actions_dist.sample().long().cpu().detach().numpy()
 
@@ -133,16 +131,17 @@ class VDNAgent(BaseAgent):
         return actions
 
     def predict(self, obs, available_actions):
-        '''take greedy actions
+        """take greedy actions
         Args:
-            obs (np.ndarray):               (n_agents, obs_shape)
-            available_actions (np.ndarray): (n_agents, n_actions)
+            obs (np.ndarray):               (num_agents, obs_shape)
+            available_actions (np.ndarray): (num_agents, n_actions)
         Returns:
-            actions (np.ndarray):           (n_agents, )
-        '''
+            actions (np.ndarray):           (num_agents, )
+        """
         obs = torch.tensor(obs, dtype=torch.float32, device=self.device)
-        available_actions = torch.tensor(
-            available_actions, dtype=torch.long, device=self.device)
+        available_actions = torch.tensor(available_actions,
+                                         dtype=torch.long,
+                                         device=self.device)
         agents_q, self.hidden_states = self.agent_model(
             obs, self.hidden_states)
         # mask unavailable actions
@@ -157,19 +156,19 @@ class VDNAgent(BaseAgent):
 
     def learn(self, state_batch, actions_batch, reward_batch, terminated_batch,
               obs_batch, available_actions_batch, filled_batch, **kwargs):
-        '''
+        """
         Args:
             state (np.ndarray):                   (batch_size, T, state_shape)
-            actions (np.ndarray):                 (batch_size, T, n_agents)
+            actions (np.ndarray):                 (batch_size, T, num_agents)
             reward (np.ndarray):                  (batch_size, T, 1)
             terminated (np.ndarray):              (batch_size, T, 1)
-            obs (np.ndarray):                     (batch_size, T, n_agents, obs_shape)
-            available_actions_batch (np.ndarray): (batch_size, T, n_agents, n_actions)
+            obs (np.ndarray):                     (batch_size, T, num_agents, obs_shape)
+            available_actions_batch (np.ndarray): (batch_size, T, num_agents, n_actions)
             filled_batch (np.ndarray):            (batch_size, T, 1)
         Returns:
             mean_loss (float): train loss
             mean_td_error (float): train TD error
-        '''
+        """
         # update target model
         if self.global_steps % self.update_target_interval == 0:
             self.update_target()
@@ -197,20 +196,21 @@ class VDNAgent(BaseAgent):
         self._init_hidden_states(batch_size)
         for t in range(episode_len):
             obs = obs_batch[:, t, :, :]
-            # obs: (batch_size * n_agents, obs_shape)
+            # obs: (batch_size * num_agents, obs_shape)
             obs = obs.reshape(-1, obs_batch.shape[-1])
             # Calculate estimated Q-Values
             local_q, self.hidden_states = self.agent_model(
                 obs, self.hidden_states)
-            #  local_q: (batch_size * n_agents, n_actions) -->  (batch_size, n_agents, n_actions)
-            local_q = local_q.reshape(batch_size, self.n_agents, -1)
+            #  local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
+            local_q = local_q.reshape(batch_size, self.num_agents, -1)
             local_qs.append(local_q)
 
             # Calculate the Q-Values necessary for the target
             target_local_q, self.target_hidden_states = self.target_agent_model(
                 obs, self.target_hidden_states)
-            # target_local_q: (batch_size * n_agents, n_actions) -->  (batch_size, n_agents, n_actions)
-            target_local_q = target_local_q.view(batch_size, self.n_agents, -1)
+            # target_local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
+            target_local_q = target_local_q.view(batch_size, self.num_agents,
+                                                 -1)
             target_local_qs.append(target_local_q)
 
         # Concat over time
@@ -220,8 +220,9 @@ class VDNAgent(BaseAgent):
 
         # Pick the Q-Values for the actions taken by each agent
         # Remove the last dim
-        chosen_action_local_qs = torch.gather(
-            local_qs[:, :-1, :, :], dim=3, index=actions_batch).squeeze(3)
+        chosen_action_local_qs = torch.gather(local_qs[:, :-1, :, :],
+                                              dim=3,
+                                              index=actions_batch).squeeze(3)
 
         # mask unavailable actions
         target_local_qs[available_actions_batch[:, 1:, :] == 0] = -1e10
@@ -231,8 +232,8 @@ class VDNAgent(BaseAgent):
             # Get actions that maximise live Q (for double q-learning)
             local_qs_detach = local_qs.clone().detach()
             local_qs_detach[available_actions_batch == 0] = -1e10
-            cur_max_actions = local_qs_detach[:, 1:].max(
-                dim=3, keepdim=True)[1]
+            cur_max_actions = local_qs_detach[:, 1:].max(dim=3,
+                                                         keepdim=True)[1]
             target_local_max_qs = torch.gather(
                 target_local_qs, dim=3, index=cur_max_actions).squeeze(3)
         else:
