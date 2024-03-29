@@ -1,9 +1,9 @@
-'''
+"""
 Author: jianzhnie
 LastEditors: jianzhnie
 Description: RLToolKit is a flexible and high-efficient reinforcement learning framework.
 Copyright (c) 2022 by jianzhnie@126.com, All Rights Reserved.
-'''
+"""
 
 import torch
 import torch.nn as nn
@@ -11,23 +11,25 @@ import torch.nn as nn
 
 class QTransModel(nn.Module):
     """Joint action-value network
-       输入: state、所有 agent 的 hidden_states、其他 agent 的动作，
-       输出: 所有动作对应的联合Q值
+    输入: state、所有 agent 的 hidden_states、其他 agent 的动作，
+    输出: 所有动作对应的联合Q值
     """
 
-    def __init__(self,
-                 n_agents: int = None,
-                 n_actions: int = None,
-                 state_dim: int = None,
-                 rnn_hidden_dim: int = 32,
-                 mixing_embed_dim: int = 32,
-                 qtran_arch: str = 'qtran_paper',
-                 network_size: str = 'small'):
+    def __init__(
+        self,
+        n_agents: int = None,
+        n_actions: int = None,
+        state_shape: int = None,
+        rnn_hidden_dim: int = 32,
+        mixing_embed_dim: int = 32,
+        qtran_arch: str = 'qtran_paper',
+        network_size: str = 'small',
+    ):
         super(QTransModel, self).__init__()
 
         self.n_agents = n_agents
         self.n_actions = n_actions
-        self.state_dim = state_dim
+        self.state_shape = state_shape
         self.rnn_hidden_dim = rnn_hidden_dim
         self.qtran_arch = qtran_arch
         self.network_size = network_size
@@ -35,51 +37,62 @@ class QTransModel(nn.Module):
         # action_encoding 对输入的每个 agent的 hidden_states 和动作进行编码，
         # 从而将所有 agents 的 hidden_states 和动作相加得到近似的联合 hidden_states 和动作
         ae_input = self.rnn_hidden_dim + self.n_actions
-        self.action_encoding = nn.Sequential(nn.Linear(ae_input, ae_input),
-                                             nn.ReLU(inplace=True),
-                                             nn.Linear(ae_input, ae_input))
+        self.action_encoding = nn.Sequential(
+            nn.Linear(ae_input, ae_input),
+            nn.ReLU(inplace=True),
+            nn.Linear(ae_input, ae_input),
+        )
 
         # Q(s,u)
         if self.qtran_arch == 'coma_critic':
             # Q takes [state, u] as input
-            q_input_size = state_dim + (n_agents * n_actions)
+            q_input_size = state_shape + (n_agents * n_actions)
         elif self.qtran_arch == 'qtran_paper':
             # Q takes [state, agent_action_observation_encodings]
             # 编码求和之后输入 state、所有 agent 的 hidden_states 和动作之和
-            q_input_size = state_dim + rnn_hidden_dim + n_actions
+            q_input_size = state_shape + rnn_hidden_dim + n_actions
         else:
             raise Exception('{} is not a valid QTran architecture'.format(
                 self.qtran_arch))
 
         if self.network_size == 'small':
-            self.Q = nn.Sequential(
+            self.qnet = nn.Sequential(
                 nn.Linear(q_input_size, mixing_embed_dim),
                 nn.ReLU(inplace=True),
                 nn.Linear(mixing_embed_dim, mixing_embed_dim),
-                nn.ReLU(inplace=True), nn.Linear(mixing_embed_dim, 1))
+                nn.ReLU(inplace=True),
+                nn.Linear(mixing_embed_dim, 1),
+            )
 
             # V(s)
-            self.V = nn.Sequential(
-                nn.Linear(state_dim, mixing_embed_dim), nn.ReLU(inplace=True),
+            self.vnet = nn.Sequential(
+                nn.Linear(state_shape, mixing_embed_dim),
+                nn.ReLU(inplace=True),
                 nn.Linear(mixing_embed_dim, mixing_embed_dim),
-                nn.ReLU(inplace=True), nn.Linear(mixing_embed_dim, 1))
+                nn.ReLU(inplace=True),
+                nn.Linear(mixing_embed_dim, 1),
+            )
 
         elif self.network_size == 'big':
-            self.Q = nn.Sequential(
+            self.qnet = nn.Sequential(
                 nn.Linear(q_input_size, mixing_embed_dim),
                 nn.ReLU(inplace=True),
                 nn.Linear(mixing_embed_dim, mixing_embed_dim),
                 nn.ReLU(inplace=True),
                 nn.Linear(mixing_embed_dim, mixing_embed_dim),
-                nn.ReLU(inplace=True), nn.Linear(mixing_embed_dim, 1))
+                nn.ReLU(inplace=True),
+                nn.Linear(mixing_embed_dim, 1),
+            )
             # V(s)
-            self.V = nn.Sequential(
-                nn.Linear(self.state_dim, mixing_embed_dim),
+            self.vnet = nn.Sequential(
+                nn.Linear(self.state_shape, mixing_embed_dim),
                 nn.ReLU(inplace=True),
                 nn.Linear(mixing_embed_dim, mixing_embed_dim),
                 nn.ReLU(inplace=True),
                 nn.Linear(mixing_embed_dim, mixing_embed_dim),
-                nn.ReLU(inplace=True), nn.Linear(mixing_embed_dim, 1))
+                nn.ReLU(inplace=True),
+                nn.Linear(mixing_embed_dim, 1),
+            )
 
         else:
             raise Exception('{} is not a valid QTran architecture'.format(
@@ -87,32 +100,42 @@ class QTransModel(nn.Module):
 
     # 因为所有时刻所有 agent 的 hidden_states 在之前已经计算好了，
     # 所以联合 Q 值可以一次计算所有 transition 的，不需要一条一条计算。
-    def forward(self, state, hidden_states, actions=None):
-        '''
+    def forward(self, state, hidden_states, actions_onehot=None, actions=None):
+        """
         Args:
-            state (torch.Tensor):          (batch_size, T, state_dim)
+            state (torch.Tensor):          (batch_size, T, state_shape)
             hidden_states (torch.Tensor):   (batch_size, T, n_agents, n_actions)
             actions (torch.Tensor):         (batch_size, T, n_agents, n_actions)
         Returns:
             q_total (torch.Tensor):  (batch_size, T, 1)
             v_total (torch.Tensor):  (batch_size, T, 1)
-        '''
+        """
         batch_size = state.size(0)
         episode_len = state.size(1)
 
-        # state : (batch_size * T, state_dim)
-        state = state.reshape(-1, self.state_dim)
+        # state : (batch_size * T, state_shape)
+        state = state.reshape(-1, self.state_shape)
 
         if self.qtran_arch == 'coma_critic':
-            # It will arrive as (bs, ts, agents, actions), we need to reshape it
-            actions = actions.reshape(-1, self.n_agents * self.n_actions)
+            if actions is None:
+                # Use the actions taken by the agents
+                actions = actions_onehot.reshape(
+                    batch_size * episode_len, self.n_agents * self.n_actions)
+            else:
+                # It will arrive as (bs, ts, agents, actions), we need to reshape it
+                actions = actions.reshape(-1, self.n_agents * self.n_actions)
 
             inputs = torch.cat([state, actions], dim=1)
 
         elif self.qtran_arch == 'qtran_paper':
-            # It will arrive as (bs, ts, agents, actions), we need to reshape it
-            actions = actions.reshape(batch_size * episode_len, self.n_agents,
-                                      self.n_actions)
+            if actions is None:
+                # Use the actions taken by the agents
+                actions = actions_onehot.reshape(
+                    batch_size * episode_len, self.n_agents * self.n_actions)
+            else:
+                # It will arrive as (bs, ts, agents, actions), we need to reshape it
+                actions = actions.reshape(batch_size * episode_len,
+                                          self.n_agents, self.n_actions)
 
             hidden_states = hidden_states.reshape(batch_size * episode_len,
                                                   self.n_agents, -1)
@@ -129,42 +152,44 @@ class QTransModel(nn.Module):
             state_action_encoding = state_action_encoding.sum(dim=1)
             inputs = torch.cat([state, state_action_encoding], dim=1)
 
-        q_outputs = self.Q(inputs)
-        v_outputs = self.V(state)
+        q_outputs = self.qnet(inputs)
+        v_outputs = self.vnet(state)
 
         return q_outputs, v_outputs
 
 
 class QTranBase(nn.Module):
     """Joint action-value network
-       输入: state、所有 agent 的 hidden_states、其他 agent 的动作，
-       输出: 所有动作对应的联合Q值
+    输入: state、所有 agent 的 hidden_states、其他 agent 的动作，
+    输出: 所有动作对应的联合Q值
     """
 
-    def __init__(self,
-                 n_agents: int = None,
-                 n_actions: int = None,
-                 state_dim: int = None,
-                 rnn_hidden_dim: int = 32,
-                 mixing_embed_dim: int = 32):
+    def __init__(
+        self,
+        n_agents: int = None,
+        n_actions: int = None,
+        state_shape: int = None,
+        rnn_hidden_dim: int = 32,
+        mixing_embed_dim: int = 32,
+    ):
         super(QTranBase, self).__init__()
 
-        self.q = QtranQ(n_agents, n_actions, state_dim, rnn_hidden_dim,
+        self.q = QtranQ(n_agents, n_actions, state_shape, rnn_hidden_dim,
                         mixing_embed_dim)
 
-        self.v = QtranV(n_agents, n_actions, state_dim, rnn_hidden_dim,
+        self.v = QtranV(n_agents, n_actions, state_shape, rnn_hidden_dim,
                         mixing_embed_dim)
 
     def forward(self, state, hidden_states, actions=None):
-        '''
+        """
         Args:
-            state (torch.Tensor):          (batch_size, T, state_dim)
+            state (torch.Tensor):          (batch_size, T, state_shape)
             hidden_states (torch.Tensor):   (batch_size, T, n_agents, n_actions)
             actions (torch.Tensor):         (batch_size, T, n_agents, n_actions)
         Returns:
             q_total (torch.Tensor):  (batch_size, T, 1)
             v_total (torch.Tensor):  (batch_size, T, 1)
-        '''
+        """
 
         # (batch_size * T, 1)
         q_total = self.q(state, hidden_states, actions)
@@ -182,42 +207,48 @@ class QtranQ(nn.Module):
         - 将所有 agents 的 hidden_states 和动作相加得到近似的联合hidden_states和动作
     """
 
-    def __init__(self,
-                 n_agents: int = None,
-                 n_actions: int = None,
-                 state_dim: int = None,
-                 rnn_hidden_dim: int = 32,
-                 mixing_embed_dim: int = 32):
+    def __init__(
+        self,
+        n_agents: int = None,
+        n_actions: int = None,
+        state_shape: int = None,
+        rnn_hidden_dim: int = 32,
+        mixing_embed_dim: int = 32,
+    ):
         super(QtranQ, self).__init__()
         self.n_agents = n_agents
         self.n_actions = n_actions
-        self.state_dim = state_dim
+        self.state_shape = state_shape
         self.rnn_hidden_dim = rnn_hidden_dim
 
         ae_input = rnn_hidden_dim + n_actions
         self.hidden_action_encoder = nn.Sequential(
-            nn.Linear(ae_input, ae_input), nn.ReLU(inplace=True),
-            nn.Linear(ae_input, ae_input))
+            nn.Linear(ae_input, ae_input),
+            nn.ReLU(inplace=True),
+            nn.Linear(ae_input, ae_input),
+        )
 
-        q_input = state_dim + n_actions + rnn_hidden_dim
-        self.q = nn.Sequential(nn.Linear(q_input, mixing_embed_dim),
-                               nn.ReLU(inplace=True),
-                               nn.Linear(mixing_embed_dim, mixing_embed_dim),
-                               nn.ReLU(inplace=True),
-                               nn.Linear(mixing_embed_dim, 1))
+        q_input = state_shape + n_actions + rnn_hidden_dim
+        self.q = nn.Sequential(
+            nn.Linear(q_input, mixing_embed_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(mixing_embed_dim, mixing_embed_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(mixing_embed_dim, 1),
+        )
 
     def forward(self, state, hidden_states, actions):
-        '''
+        """
         Args:
-            state (torch.Tensor):          (batch_size, T, state_dim)
+            state (torch.Tensor):          (batch_size, T, state_shape)
             hidden_states (torch.Tensor):   (batch_size, T, n_agents, rnn_hidden_dim)
             actions (torch.Tensor):         (batch_size, T, n_agents, n_actions)
         Returns:
             q_total (torch.Tensor):  (batch_size, T, 1)
-        '''
+        """
         batch_size, episode_len, n_agents, _ = hidden_states.shape
-        # shape : (batch_size * T, state_dim)
-        state = state.reshape(-1, self.state_dim)
+        # shape : (batch_size * T, state_shape)
+        state = state.reshape(-1, self.state_shape)
 
         # shape : (batch_size, T,  n_agents, rnn_hidden_dim + n_actions)
         hidden_actions = torch.cat([hidden_states, actions], dim=-1)
@@ -250,40 +281,46 @@ class QtranV(nn.Module):
         - 将所有 agents 的 hidden_states 相加得到近似的联合 hidden_states
     """
 
-    def __init__(self,
-                 n_agents: int = None,
-                 n_actions: int = None,
-                 state_dim: int = None,
-                 rnn_hidden_dim: int = 32,
-                 mixing_embed_dim: int = 32):
+    def __init__(
+        self,
+        n_agents: int = None,
+        n_actions: int = None,
+        state_shape: int = None,
+        rnn_hidden_dim: int = 32,
+        mixing_embed_dim: int = 32,
+    ):
         super(QtranV, self).__init__()
         self.n_agents = n_agents
         self.n_actions = n_actions
-        self.state_dim = state_dim
+        self.state_shape = state_shape
         self.rnn_hidden_dim = rnn_hidden_dim
 
         self.hidden_encoder = nn.Sequential(
-            nn.Linear(rnn_hidden_dim, rnn_hidden_dim), nn.ReLU(inplace=True),
-            nn.Linear(rnn_hidden_dim, rnn_hidden_dim))
+            nn.Linear(rnn_hidden_dim, rnn_hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(rnn_hidden_dim, rnn_hidden_dim),
+        )
 
-        v_input = state_dim + rnn_hidden_dim
-        self.v = nn.Sequential(nn.Linear(v_input, mixing_embed_dim),
-                               nn.ReLU(inplace=True),
-                               nn.Linear(mixing_embed_dim, mixing_embed_dim),
-                               nn.ReLU(inplace=True),
-                               nn.Linear(mixing_embed_dim, 1))
+        v_input = state_shape + rnn_hidden_dim
+        self.v = nn.Sequential(
+            nn.Linear(v_input, mixing_embed_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(mixing_embed_dim, mixing_embed_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(mixing_embed_dim, 1),
+        )
 
     def forward(self, state: torch.Tensor,
                 hidden_states: torch.Tensor) -> torch.Tensor:
-        '''
+        """
         Args:
-            state (torch.Tensor):          (batch_size, T, state_dim)
+            state (torch.Tensor):          (batch_size, T, state_shape)
             hidden_states (torch.Tensor):   (batch_size, T, n_agents, rnn_hidden_dim)
         Returns:
             v_total (torch.Tensor):  (batch_size, T, 1)
-        '''
+        """
         batch_size, episode_len, n_agents, _ = hidden_states.shape
-        # state : (batch_size * T, state_dim)
+        # state : (batch_size * T, state_shape)
         state = state.reshape(batch_size * episode_len, -1)
 
         # (batch_size * T * n_agents, rnn_hidden_dim)
