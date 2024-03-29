@@ -36,6 +36,41 @@ def is_wrapped(env: gym.Env, wrapper_class: Type[gym.Wrapper]) -> bool:
     return unwrap_wrapper(env, wrapper_class) is not None
 
 
+def flatten_obs(obs, space: gym.spaces.Space):
+    """Flatten observations, depending on the observation space.
+
+    :param obs: observations.
+                A list or tuple of observations, one per environment.
+                Each environment observation may be a NumPy array, or a dict or tuple of NumPy arrays.
+    :return: flattened observations.
+            A flattened NumPy array or an OrderedDict or tuple of flattened numpy arrays.
+            Each NumPy array has the environment index as its first axis.
+    """
+    assert isinstance(
+        obs, (list,
+              tuple)), 'expected list or tuple of observations per environment'
+    assert len(obs) > 0, 'need observations from at least one environment'
+
+    if isinstance(space, gym.spaces.Dict):
+        assert isinstance(
+            space.spaces,
+            OrderedDict), 'Dict space must have ordered subspaces'
+        assert isinstance(
+            obs[0], dict
+        ), 'non-dict observation for environment with Dict observation space'
+        return OrderedDict([(k, np.stack([o[k] for o in obs]))
+                            for k in space.spaces.keys()])
+    elif isinstance(space, gym.spaces.Tuple):
+        assert isinstance(
+            obs[0], tuple
+        ), 'non-tuple observation for environment with Tuple observation space'
+        obs_len = len(space.spaces)
+        return tuple(np.stack([o[i] for o in obs])
+                     for i in range(obs_len))  # type: ignore[index]
+    else:
+        return np.stack(obs)  # type: ignore[arg-type]
+
+
 def copy_obs_dict(obs: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
     """Deep-copy a dict of numpy arrays.
 

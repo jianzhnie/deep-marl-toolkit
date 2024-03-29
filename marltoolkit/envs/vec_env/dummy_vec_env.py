@@ -37,7 +37,6 @@ class DummyVecEnv(BaseVecEnv):
         # Define core attributes using the sub-environments
         # As we support `make_vec(spec)` then we can't include a `spec = self.envs[0].spec` as this doesn't guarantee we can actual recreate the vector env.
         self.num_envs = len(self.envs)
-        self.metadata = self.envs[0].metadata
         self.render_mode = self.envs[0].render_mode
 
         if (obs_space is None) or (action_space is None):
@@ -64,9 +63,7 @@ class DummyVecEnv(BaseVecEnv):
         self.buf_terminateds = np.zeros((self.num_envs, ), dtype=np.bool_)
         self.buf_truncateds = np.zeros((self.num_envs, ), dtype=np.bool_)
         self.buf_dones = np.zeros((self.num_envs, ), dtype=np.bool_)
-
         self.copy = copy
-        self.metadata = self.envs[0].metadata
 
     def seed(self, seed: Optional[Union[int, Sequence[int]]] = None):
         """Sets the seed in all sub-environments.

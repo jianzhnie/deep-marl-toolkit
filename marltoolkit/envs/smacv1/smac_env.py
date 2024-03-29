@@ -4,7 +4,7 @@ import numpy as np
 from gymnasium.spaces import Box, Dict, Discrete
 from smac.env import StarCraft2Env
 
-from marltoolkit.envs.marl_base_env import MARLBaseEnv
+from marltoolkit.envs.base_env import MultiAgentEnv
 
 
 class SMACWrapperEnv(object):
@@ -36,7 +36,14 @@ class SMACWrapperEnv(object):
         self.done_dim = self.num_agents
 
         # Space
-        self.obs_space = Box(-2.0, 2.0, shape=(self.obs_shape, ))
+        self.obs_space = Box(
+            -2.0,
+            2.0,
+            shape=(
+                self.num_agents,
+                self.obs_shape,
+            ),
+        )
         self.state_space = Box(-2.0, 2.0, shape=(self.state_shape, ))
         self.action_mask_space = Box(-2.0, 2.0, shape=(self.n_actions, ))
         self.action_space = Discrete(self.n_actions)
@@ -66,6 +73,10 @@ class SMACWrapperEnv(object):
     def win_counted(self):
         """Check if the win is counted."""
         return self.env.win_counted
+
+    def seed(self, seed: int = None):
+        """Set the seed for the environment."""
+        self.env.seed()
 
     def get_available_actions(self):
         return self.env.get_avail_actions()
@@ -140,7 +151,7 @@ class SMACWrapperEnv(object):
         return env_info
 
 
-class RLlibSMAC(MARLBaseEnv):
+class RLlibSMAC(MultiAgentEnv):
 
     def __init__(self, map_name):
         self.env = StarCraft2Env(map_name)
