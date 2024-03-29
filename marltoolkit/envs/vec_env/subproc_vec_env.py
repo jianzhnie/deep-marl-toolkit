@@ -468,6 +468,7 @@ class SubprocVecEnv(BaseVecEnv):
                 pipe.close()
         for process in self.processes:
             process.join()
+        self.closed = True
 
     def _poll(self, timeout=None):
         self._assert_is_running()
@@ -584,25 +585,24 @@ class SubprocVecEnv(BaseVecEnv):
 
 def _worker(
     index: int,
-    pipe: mp.connection.Connection,
+    child_pipe: mp.connection.Connection,
     parent_pipe: mp.connection.Connection,
     env_fn_wrapper: CloudpickleWrapper,
     obs_buf: Optional[np.array],
     state_buf: Optional[np.array],
     error_queue: mp.Queue,
 ) -> None:
-    # Import here to avoid a circular import
     parent_pipe.close()
     env = env_fn_wrapper.x()
     assert obs_buf is None
     assert state_buf is None
     while True:
         try:
-            command, data = pipe.recv()
+            command, data = child_pipe.recv()
 
             if command == 'reset':
                 obs, state, info = env.reset(**data)
-                pipe.send(((obs, state, info), True))
+                child_pipe.send(((obs, state, info), True))
 
             elif command == 'step':
                 (obs, state, reward, terminated, truncated,
@@ -615,14 +615,14 @@ def _worker(
                     info['final_obs'] = old_obs
                     info['final_state'] = old_state
                     info['final_info'] = old_info
-                pipe.send(((obs, state, reward, done, info), True))
+                child_pipe.send(((obs, state, reward, done, info), True))
 
             elif command == 'seed':
                 env.seed(data)
-                pipe.send((None, True))
+                child_pipe.send((None, True))
 
             elif command == 'close':
-                pipe.send((None, True))
+                child_pipe.send((None, True))
                 break
 
             elif command == '_call':
@@ -633,16 +633,16 @@ def _worker(
                         f'`_call`. Use `{name}` directly instead.')
                 function = getattr(env, name)
                 if callable(function):
-                    pipe.send((function(*args, **kwargs), True))
+                    child_pipe.send((function(*args, **kwargs), True))
                 else:
-                    pipe.send((function, True))
+                    child_pipe.send((function, True))
 
             elif command == '_setattr':
                 name, value = data
                 setattr(env, name, value)
-                pipe.send((None, True))
+                child_pipe.send((None, True))
             elif command == '_check_spaces':
-                pipe.send((
+                child_pipe.send((
                     (
                         data[0] == env.obs_space,
                         data[1] == env.state_space,
@@ -657,14 +657,14 @@ def _worker(
                     '`_setattr`, `_check_spaces`}.')
         except (KeyboardInterrupt, Exception):
             error_queue.put((index, ) + sys.exc_info()[:2])
-            pipe.send((None, False))
+            child_pipe.send((None, False))
         finally:
             env.close()
 
 
 def _shareworker(
     index: int,
-    pipe: mp.connection.Connection,
+    child_pipe: mp.connection.Connection,
     parent_pipe: mp.connection.Connection,
     env_fn_wrapper: CloudpickleWrapper,
     obs_buf: Optional[np.array],
@@ -678,14 +678,14 @@ def _shareworker(
 
     while True:
         try:
-            command, data = pipe.recv()
+            command, data = child_pipe.recv()
 
             if command == 'reset':
                 obs, state, info = env.reset(**data)
                 write_to_shared_memory(obs_space, index, obs, obs_buf)
                 write_to_shared_memory(state_space, index, state, state_buf)
 
-                pipe.send(((None, None, info), True))
+                child_pipe.send(((None, None, info), True))
 
             if command == 'step':
                 obs, state, reward, terminated, truncated, info = env.step(
@@ -700,14 +700,14 @@ def _shareworker(
                 write_to_shared_memory(obs_space, index, obs, obs_buf)
                 write_to_shared_memory(state_space, index, state, state_buf)
 
-                pipe.send(((None, None, reward, done, info), True))
+                child_pipe.send(((None, None, reward, done, info), True))
 
             elif command == 'seed':
                 env.seed(data)
-                pipe.send((None, True))
+                child_pipe.send((None, True))
 
             elif command == 'close':
-                pipe.close()
+                child_pipe.close()
                 env.close()
                 break
 
@@ -719,16 +719,16 @@ def _shareworker(
                         f'`_call`. Use `{name}` directly instead.')
                 function = getattr(env, name)
                 if callable(function):
-                    pipe.send((function(*args, **kwargs), True))
+                    child_pipe.send((function(*args, **kwargs), True))
                 else:
-                    pipe.send((function, True))
+                    child_pipe.send((function, True))
 
             elif command == '_setattr':
                 name, value = data
                 setattr(env, name, value)
-                pipe.send((None, True))
+                child_pipe.send((None, True))
             elif command == '_check_spaces':
-                pipe.send((
+                child_pipe.send((
                     (
                         data[0] == obs_space,
                         data[1] == state_space,
@@ -743,6 +743,6 @@ def _shareworker(
                     '`_setattr`, `_check_spaces`}.')
         except (KeyboardInterrupt, Exception):
             error_queue.put((index, ) + sys.exc_info()[:2])
-            pipe.send((None, False))
+            child_pipe.send((None, False))
         finally:
             env.close()
