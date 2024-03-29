@@ -4,7 +4,6 @@ import sys
 import time
 
 import torch
-from smac.env import StarCraft2Env
 from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append('../')
@@ -12,8 +11,8 @@ from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.qmix_agent import QMixAgent
 from marltoolkit.data import MaReplayBuffer
-from marltoolkit.envs import SC2EnvWrapper
-from marltoolkit.modules.actors import RNNModel
+from marltoolkit.envs import SMACWrapperEnv
+from marltoolkit.modules.actors import RNNActor
 from marltoolkit.modules.mixers import QMixerModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
                                                 run_train_episode)
@@ -36,13 +35,16 @@ def main():
     device = torch.device('cuda') if torch.cuda.is_available(
     ) and args.cuda else torch.device('cpu')
 
-    env = StarCraft2Env(map_name=args.scenario, difficulty=args.difficulty)
-
-    env = SC2EnvWrapper(env)
+    env = SMACWrapperEnv(
+        map_name=args.scenario,
+        difficulty=args.difficulty,
+        step_mul=args.step_mul,
+        seed=args.seed,
+    )
     args.episode_limit = env.episode_limit
     args.obs_shape = env.obs_shape
     args.state_shape = env.state_shape
-    args.n_agents = env.n_agents
+    args.num_agents = env.num_agents
     args.n_actions = env.n_actions
     args.device = device
 
@@ -84,7 +86,7 @@ def main():
         device=args.device,
     )
 
-    agent_model = RNNModel(
+    agent_model = RNNActor(
         input_shape=args.obs_shape,
         rnn_hidden_dim=args.rnn_hidden_dim,
         n_actions=args.n_actions,
