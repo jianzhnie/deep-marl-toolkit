@@ -7,15 +7,16 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append('../')
+from smac.env import StarCraft2Env
+
 from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.qmix_agent import QMixAgent
 from marltoolkit.data import MaReplayBuffer
-from marltoolkit.envs import SMACWrapperEnv
+from marltoolkit.envs.smacv1.env_wrapper import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNActor
 from marltoolkit.modules.mixers import QMixerModel
-from marltoolkit.runners.episode_runner import (run_evaluate_episode,
-                                                run_train_episode)
+from marltoolkit.runners.runner import run_evaluate_episode, run_train_episode
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
 
@@ -35,12 +36,9 @@ def main():
     device = torch.device('cuda') if torch.cuda.is_available(
     ) and args.cuda else torch.device('cpu')
 
-    env = SMACWrapperEnv(
-        map_name=args.scenario,
-        difficulty=args.difficulty,
-        step_mul=args.step_mul,
-        seed=args.seed,
-    )
+    env = StarCraft2Env(map_name=args.scenario, difficulty=args.difficulty)
+    env = SC2EnvWrapper(env)
+
     args.episode_limit = env.episode_limit
     args.obs_shape = env.obs_shape
     args.state_shape = env.state_shape
@@ -81,19 +79,19 @@ def main():
         episode_limit=args.episode_limit,
         state_shape=args.state_shape,
         obs_shape=args.obs_shape,
-        num_agents=args.n_agents,
+        num_agents=args.num_agents,
         num_actions=args.n_actions,
         device=args.device,
     )
 
     agent_model = RNNActor(
-        input_shape=args.obs_shape,
+        input_dim=args.obs_shape,
         rnn_hidden_dim=args.rnn_hidden_dim,
         n_actions=args.n_actions,
     )
 
     mixer_model = QMixerModel(
-        n_agents=args.n_agents,
+        num_agents=args.num_agents,
         state_shape=args.state_shape,
         mixing_embed_dim=args.mixing_embed_dim,
         hypernet_layers=args.hypernet_layers,
@@ -103,7 +101,7 @@ def main():
     marl_agent = QMixAgent(
         agent_model=agent_model,
         mixer_model=mixer_model,
-        n_agents=args.n_agents,
+        num_agents=args.num_agents,
         double_q=args.double_q,
         total_steps=args.total_steps,
         gamma=args.gamma,

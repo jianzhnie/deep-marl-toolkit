@@ -11,10 +11,9 @@ from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.vdn_agent import VDNAgent
 from marltoolkit.data import OffPolicyBufferRNN
-from marltoolkit.modules.actors import RNNModel
+from marltoolkit.modules.actors import RNNActor
 from marltoolkit.modules.mixers import VDNMixer
-from marltoolkit.runners.episode_runner import (run_evaluate_episode,
-                                                run_train_episode)
+from marltoolkit.runners.runner import run_evaluate_episode, run_train_episode
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
 from marltoolkit.utils.env_utils import make_vec_env
@@ -86,7 +85,7 @@ def main():
         done_space=args.done_shape,
         device=args.device,
     )
-    agent_model = RNNModel(
+    agent_model = RNNActor(
         input_dim=args.obs_dim,
         fc_hidden_dim=args.fc_hidden_dim,
         rnn_hidden_dim=args.rnn_hidden_dim,
