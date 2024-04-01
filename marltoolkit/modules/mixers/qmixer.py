@@ -10,14 +10,14 @@ import torch.nn.functional as F
 
 
 class QMixerModel(nn.Module):
-    '''
-    input: n_agents' agent_qs (a scalar for each agent)
+    """
+    input: num_agents' agent_qs (a scalar for each agent)
     output: a scalar (Q)
-    '''
+    """
 
     def __init__(
         self,
-        n_agents: int = None,
+        num_agents: int = None,
         state_shape: int = None,
         hypernet_layers: int = 2,
         mixing_embed_dim: int = 32,
@@ -25,18 +25,19 @@ class QMixerModel(nn.Module):
     ):
         super(QMixerModel, self).__init__()
 
-        self.n_agents = n_agents
+        self.num_agents = num_agents
         self.state_shape = state_shape
         self.mixing_embed_dim = mixing_embed_dim
         if hypernet_layers == 1:
             self.hyper_w_1 = nn.Linear(state_shape,
-                                       mixing_embed_dim * n_agents)
+                                       mixing_embed_dim * num_agents)
             self.hyper_w_2 = nn.Linear(state_shape, mixing_embed_dim)
         elif hypernet_layers == 2:
             self.hyper_w_1 = nn.Sequential(
                 nn.Linear(state_shape, hypernet_embed_dim),
                 nn.ReLU(inplace=True),
-                nn.Linear(hypernet_embed_dim, mixing_embed_dim * n_agents))
+                nn.Linear(hypernet_embed_dim, mixing_embed_dim * num_agents),
+            )
             self.hyper_w_2 = nn.Sequential(
                 nn.Linear(state_shape, hypernet_embed_dim),
                 nn.ReLU(inplace=True),
@@ -51,23 +52,23 @@ class QMixerModel(nn.Module):
             nn.Linear(mixing_embed_dim, 1))
 
     def forward(self, agent_qs: torch.Tensor, states: torch.Tensor):
-        '''
+        """
         Args:
-            agent_qs (torch.Tensor): (batch_size, T, n_agents)
+            agent_qs (torch.Tensor): (batch_size, T, num_agents)
             states (torch.Tensor):   (batch_size, T, state_shape)
         Returns:
             q_total (torch.Tensor):  (batch_size, T, 1)
-        '''
+        """
         batch_size = agent_qs.size(0)
         # states : (batch_size * T, state_shape)
         states = states.reshape(-1, self.state_shape)
-        # agent_qs: (batch_size * T, 1, n_agents)
-        agent_qs = agent_qs.view(-1, 1, self.n_agents)
+        # agent_qs: (batch_size * T, 1, num_agents)
+        agent_qs = agent_qs.view(-1, 1, self.num_agents)
 
         # First layer w and b
         w1 = torch.abs(self.hyper_w_1(states))
-        # w1: (batch_size * T, n_agents, embed_dim)
-        w1 = w1.view(-1, self.n_agents, self.mixing_embed_dim)
+        # w1: (batch_size * T, num_agents, embed_dim)
+        w1 = w1.view(-1, self.num_agents, self.mixing_embed_dim)
         b1 = self.hyper_b_1(states)
         b1 = b1.view(-1, 1, self.mixing_embed_dim)
 
@@ -96,13 +97,13 @@ class QMixerModel(nn.Module):
 
 class QMixerCentralFF(nn.Module):
 
-    def __init__(self, n_agents, state_shape, central_mixing_embed_dim,
+    def __init__(self, num_agents, state_shape, central_mixing_embed_dim,
                  central_action_embed):
         super(QMixerCentralFF, self).__init__()
 
-        self.n_agents = n_agents
+        self.num_agents = num_agents
         self.state_shape = state_shape
-        self.input_dim = n_agents * central_action_embed + state_shape
+        self.input_dim = num_agents * central_action_embed + state_shape
         self.central_mixing_embed_dim = central_mixing_embed_dim
         self.central_action_embed = central_action_embed
 
@@ -122,8 +123,8 @@ class QMixerCentralFF(nn.Module):
     def forward(self, agent_qs, states):
         bs = agent_qs.size(0)
         states = states.reshape(-1, self.state_shape)
-        agent_qs = agent_qs.reshape(-1,
-                                    self.n_agents * self.central_action_embed)
+        agent_qs = agent_qs.reshape(
+            -1, self.num_agents * self.central_action_embed)
 
         inputs = torch.cat([states, agent_qs], dim=1)
 

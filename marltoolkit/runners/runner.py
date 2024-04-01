@@ -24,7 +24,7 @@ def run_train_episode(
         state_shape=args.state_shape,
         obs_shape=args.obs_shape,
         num_actions=args.n_actions,
-        num_agents=args.n_agents,
+        num_agents=args.num_agents,
     )
 
     while not terminated:
