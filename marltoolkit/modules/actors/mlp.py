@@ -9,10 +9,10 @@ def weights_init_(module: nn.Module):
         nn.init.constant_(module.bias, 0)
 
 
-class MLPActorModel(nn.Module):
+class MLPActor(nn.Module):
 
     def __init__(self, obs_shape: int, n_actions: int, hidden_size: int = 64):
-        super(MLPActorModel, self).__init__()
+        super(MLPActor, self).__init__()
 
         self.fc1 = nn.Linear(obs_shape, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
