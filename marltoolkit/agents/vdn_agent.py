@@ -28,6 +28,7 @@ class VDNAgent(BaseAgent):
         self,
         agent_model: nn.Module = None,
         mixer_model: nn.Module = None,
+        num_envs: int = 1,
         num_agents: int = None,
         double_q: bool = True,
         total_steps: int = 1e6,
@@ -51,6 +52,7 @@ class VDNAgent(BaseAgent):
         assert isinstance(gamma, float)
         assert isinstance(learning_rate, float)
 
+        self.num_envs = num_envs
         self.num_agents = num_agents
         self.double_q = double_q
         self.gamma = gamma

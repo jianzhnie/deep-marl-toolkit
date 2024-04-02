@@ -28,6 +28,7 @@ class QMixAgent(BaseAgent):
         self,
         agent_model: nn.Module = None,
         mixer_model: nn.Module = None,
+        num_envs: int = 1,
         num_agents: int = None,
         double_q: bool = True,
         total_steps: int = 1e6,
@@ -54,6 +55,7 @@ class QMixAgent(BaseAgent):
         assert isinstance(gamma, float)
         assert isinstance(learning_rate, float)
 
+        self.num_envs = num_envs
         self.num_agents = num_agents
         self.double_q = double_q
         self.gamma = gamma
@@ -123,10 +125,9 @@ class QMixAgent(BaseAgent):
         """
         epsilon = np.random.random()
         if epsilon < self.exploration:
-            available_actions = torch.tensor(available_actions,
-                                             dtype=torch.float32)
+            available_actions = torch.tensor(available_actions)
             actions_dist = Categorical(available_actions)
-            actions = actions_dist.sample().long().cpu().detach().numpy()
+            actions = actions_dist.sample().numpy()
 
         else:
             actions = self.predict(obs, available_actions)

@@ -17,7 +17,6 @@ def make_vec_env(
             raise ValueError(f'Unknown environment: {env_id}')
         return env
 
-    env = make_env()
     train_envs = SubprocVecEnv([make_env for _ in range(num_train_envs)])
     test_envs = SubprocVecEnv([make_env for _ in range(num_test_envs)])
-    return env, train_envs, test_envs
+    return train_envs, test_envs
