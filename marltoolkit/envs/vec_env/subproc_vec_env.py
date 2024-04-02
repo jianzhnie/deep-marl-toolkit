@@ -342,8 +342,6 @@ class SubprocVecEnv(BaseVecEnv):
             result, success = zip(pipe.recv())
             successes.append(success)
             if success:
-                print('*' * 1000)
-                print('result: ', result)
                 obs, state, rew, terminated, truncated, info = result
 
                 done = terminated or truncated
