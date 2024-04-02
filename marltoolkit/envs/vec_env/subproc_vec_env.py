@@ -15,6 +15,8 @@ from gymnasium.vector.utils import (clear_mpi_env_vars, concatenate,
                                     iterate, read_from_shared_memory,
                                     write_to_shared_memory)
 
+from marltoolkit.utils.util import flatten_list
+
 from .base_vec_env import BaseVecEnv, CloudpickleWrapper
 
 
@@ -81,7 +83,7 @@ class SubprocVecEnv(BaseVecEnv):
         state_space: Optional[gym.Space] = None,
         action_space: Optional[gym.Space] = None,
         start_method: Optional[str] = None,
-        shared_memory: bool = True,
+        shared_memory: bool = False,
         copy: bool = True,
     ) -> None:
         self.env_fns = env_fns
@@ -140,6 +142,10 @@ class SubprocVecEnv(BaseVecEnv):
             self.states = create_empty_array(self.single_state_space,
                                              n=self.num_envs,
                                              fn=np.zeros)
+
+        self.buf_rewards = np.zeros((self.num_envs, ), dtype=np.float32)
+        self.buf_dones = np.zeros((self.num_envs, ), dtype=np.bool_)
+
         self.parent_pipes, self.processes = [], []
         self.error_queue = ctx.Queue()
         target = _shareworker if self.shared_memory else _worker
@@ -329,7 +335,6 @@ class SubprocVecEnv(BaseVecEnv):
             [],
             [],
             [],
-            [],
             {},
         )
         successes = []
@@ -337,6 +342,8 @@ class SubprocVecEnv(BaseVecEnv):
             result, success = zip(pipe.recv())
             successes.append(success)
             if success:
+                print('*' * 1000)
+                print('result: ', result)
                 obs, state, rew, terminated, truncated, info = result
 
                 done = terminated or truncated
@@ -469,6 +476,23 @@ class SubprocVecEnv(BaseVecEnv):
         for process in self.processes:
             process.join()
         self.closed = True
+
+    def get_available_actions(self, ):
+        self._assert_is_running()
+        if self._state != AsyncState.DEFAULT:
+            raise AlreadyPendingCallError(
+                f'Calling `get_available_actions` while waiting for a pending call to `{self._state.value}` to complete',
+                self._state.value,
+            )
+        for pipe in self.parent_pipes:
+            pipe.send(('get_available_actions', None))
+
+        results, successes = zip(*[pipe.recv() for pipe in self.parent_pipes])
+        self._raise_if_errors(successes)
+        self._state = AsyncState.DEFAULT
+
+        avail_actions = flatten_list(results)
+        return np.array(avail_actions)
 
     def _poll(self, timeout=None):
         self._assert_is_running()
@@ -617,6 +641,14 @@ def _worker(
                     info['final_info'] = old_info
                 child_pipe.send(((obs, state, reward, done, info), True))
 
+            elif command == 'get_available_actions':
+                available_actions = env.get_available_actions()
+                child_pipe.send((available_actions, True))
+
+            elif command == 'get_env_info':
+                env_info = env.get_env_info()
+                child_pipe.send((env_info, True))
+
             elif command == 'seed':
                 env.seed(data)
                 child_pipe.send((None, True))
@@ -627,7 +659,14 @@ def _worker(
 
             elif command == '_call':
                 name, args, kwargs = data
-                if name in ['reset', 'step', 'seed', 'close']:
+                if name in [
+                        'reset',
+                        'step',
+                        'seed',
+                        'close',
+                        'get_available_actions',
+                        'get_env_info',
+                ]:
                     raise ValueError(
                         f'Trying to call function `{name}` with '
                         f'`_call`. Use `{name}` directly instead.')
@@ -653,8 +692,11 @@ def _worker(
             else:
                 raise RuntimeError(
                     f'Received unknown command `{command}`. Must '
-                    'be one of {`reset`, `step`, `seed`, `close`, `_call`, '
-                    '`_setattr`, `_check_spaces`}.')
+                    'be one of {`reset`, `step`, `seed`, `close`, `_call`, ',
+                    'get_available_actions',
+                    'get_env_info',
+                    '`_setattr`, `_check_spaces`}.',
+                )
         except (KeyboardInterrupt, Exception):
             error_queue.put((index, ) + sys.exc_info()[:2])
             child_pipe.send((None, False))

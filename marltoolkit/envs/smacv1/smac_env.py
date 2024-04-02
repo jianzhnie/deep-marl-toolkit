@@ -24,32 +24,35 @@ class SMACWrapperEnv(object):
         self.num_enemies = self.env.n_enemies
 
         # Number of actions
-        self.action_shape = self.env_info['n_actions']
+        self.action_dim = self.env_info['n_actions']
         self.n_actions = self.env_info['n_actions']
 
-        # State and observation shapes
-        self.obs_shape = self.env_info['obs_shape']
-        self.state_shape = self.env_info['state_shape']
+        # State and observation dims
+        self.obs_dim = self.env_info['obs_shape']
+        self.state_dim = self.env_info['state_shape']
 
         # Reward and done shapes
         self.reward_dim = self.num_agents
         self.done_dim = self.num_agents
 
+        # Observation and state shapes
+        self.obs_shape = (self.num_agents, self.obs_dim)
+        self.action_shape = (self.num_agents, self.action_dim)
+        self.state_shape = (self.state_dim, 1)
+        self.reward_shape = (self.reward_dim, 1)
+        self.done_shape = (self.done_dim, 1)
+
         # Space
         self.obs_space = Box(
-            -2.0,
-            2.0,
+            -np.inf,
+            np.inf,
             shape=(
                 self.num_agents,
-                self.obs_shape,
+                self.obs_dim,
             ),
         )
-        self.state_space = Box(-2.0, 2.0, shape=(self.state_shape, ))
-        self.action_mask_space = Box(-2.0, 2.0, shape=(self.n_actions, ))
+        self.state_space = Box(-np.inf, np.inf, shape=(self.state_dim, ))
         self.action_space = Discrete(self.n_actions)
-
-        self.reward_space = (self.reward_dim, )
-        self.done_space = (self.done_dim, )
 
         # Max episode steps
         self.episode_limit = self.env_info['episode_limit']
@@ -142,7 +145,6 @@ class SMACWrapperEnv(object):
             'obs_space': self.obs_space,
             'state_shape': self.state_shape,
             'state_space': self.state_space,
-            'action_mask_space': self.action_mask_space,
             'n_actions': self.n_actions,
             'action_space': self.action_space,
             'num_agents': self.num_agents,
