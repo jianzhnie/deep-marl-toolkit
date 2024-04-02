@@ -11,9 +11,11 @@ from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.vdn_agent import VDNAgent
 from marltoolkit.data import OffPolicyBufferRNN
+from marltoolkit.envs.smacv1 import SMACWrapperEnv
 from marltoolkit.modules.actors import RNNActor
 from marltoolkit.modules.mixers import VDNMixer
-from marltoolkit.runners.runner import run_evaluate_episode, run_train_episode
+from marltoolkit.runners.parallel_episode_runner import (run_evaluate_episode,
+                                                         run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
 from marltoolkit.utils.env_utils import make_vec_env
@@ -26,23 +28,23 @@ def main():
     device = torch.device('cuda') if torch.cuda.is_available(
     ) and args.cuda else torch.device('cpu')
 
-    env, train_envs, test_envs = make_vec_env(
+    train_envs, test_envs = make_vec_env(
         env_id=args.env_id,
         map_name=args.scenario,
         num_train_envs=args.num_train_envs,
         num_test_envs=args.num_test_envs,
         difficulty=args.difficulty,
     )
-
+    env = SMACWrapperEnv(map_name=args.scenario)
     args.episode_limit = env.episode_limit
-    args.obs_dim = env.obs_shape
-    args.obs_shape = (env.obs_shape, )
-    args.state_shape = (env.state_shape, )
+    args.obs_dim = env.obs_dim
+    args.obs_shape = env.obs_shape
+    args.state_shape = env.state_shape
     args.num_agents = env.num_agents
     args.n_actions = env.n_actions
-    args.action_shape = (env.n_actions, )
-    args.reward_shape = (env.reward_dim, )
-    args.done_shape = (env.done_dim, )
+    args.action_shape = env.action_shape
+    args.reward_shape = env.reward_shape
+    args.done_shape = env.done_shape
     args.device = device
 
     # init the logger before other steps
@@ -89,7 +91,7 @@ def main():
         input_dim=args.obs_dim,
         fc_hidden_dim=args.fc_hidden_dim,
         rnn_hidden_dim=args.rnn_hidden_dim,
-        action_dim=args.n_actions,
+        n_actions=args.n_actions,
     )
 
     mixer_model = VDNMixer()
@@ -97,6 +99,7 @@ def main():
     marl_agent = VDNAgent(
         agent_model=agent_model,
         mixer_model=mixer_model,
+        num_envs=args.num_train_envs,
         num_agents=args.num_agents,
         double_q=args.double_q,
         total_steps=args.total_steps,

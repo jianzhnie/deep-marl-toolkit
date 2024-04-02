@@ -17,7 +17,8 @@ from marltoolkit.agents import IDQNAgent
 from marltoolkit.data import MaReplayBuffer
 from marltoolkit.envs.smacv1.env_wrapper import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNActor
-from marltoolkit.runners.runner import run_evaluate_episode, run_train_episode
+from marltoolkit.runners.episode_runner import (run_evaluate_episode,
+                                                run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
 
