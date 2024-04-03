@@ -46,7 +46,7 @@ class RNNActor(nn.Module):
             h_in = hidden_state.reshape(self.num_rnn_layers, batch_size,
                                         self.rnn_hidden_dim)
         else:
-            h_in = self.init_hidden(batch_size)
+            h_in = self.init_hidden()
 
         hidden_states = self.rnn(out, h_in)
         q_value = self.fc2(hidden_states)  # (batch_size, n_actions)

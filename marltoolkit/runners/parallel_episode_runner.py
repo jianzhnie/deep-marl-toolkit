@@ -24,8 +24,6 @@ def run_train_episode(
     while not env_dones.all():
         available_actions = envs.get_available_actions()
         actions = agent.sample(obs, available_actions)
-        print('*' * 1000)
-        print(actions)
         next_obs, next_states, rewards, env_dones, infos = envs.step(actions)
         filled[:, episode_step] = np.ones([num_envs, 1])
         episode_step += 1
@@ -67,7 +65,7 @@ def run_evaluate_episode(
         episode_reward = 0.0
         episode_step = 0
         terminated = False
-        state, obs = env.reset()
+        obs, state = env.reset()
         while not terminated:
             available_actions = env.get_available_actions()
             actions = agent.predict(obs, available_actions)
