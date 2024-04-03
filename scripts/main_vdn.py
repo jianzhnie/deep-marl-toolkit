@@ -101,6 +101,7 @@ def main():
         mixer_model=mixer_model,
         num_envs=args.num_train_envs,
         num_agents=args.num_agents,
+        action_dim=args.n_actions,
         double_q=args.double_q,
         total_steps=args.total_steps,
         gamma=args.gamma,

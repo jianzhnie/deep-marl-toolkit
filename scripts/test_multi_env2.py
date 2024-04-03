@@ -1,5 +1,8 @@
 import sys
 
+import torch
+from torch.distributions import Categorical
+
 sys.path.append('../')
 from marltoolkit.envs.smacv1.smac_env import SMACWrapperEnv
 from marltoolkit.envs.vec_env import DummyVecEnv, SubprocVecEnv
@@ -25,12 +28,25 @@ def make_dummy_envs(map_name='3m', parallels=8):
 
 
 if __name__ == '__main__':
-    train_envs = make_dummy_envs(parallels=2)
-    train_envs.seed(0)
-    results = train_envs.reset()
-    print(results)
-    train_envs.close()
     train_envs = make_envs()
     results = train_envs.reset()
-    print(results)
+    print('Reset:', results)
+
+    env_info = train_envs.get_env_info()
+    print('env_info:', env_info)
+    action_dim = env_info['n_actions']
+    num_agents = env_info['num_agents']
+    num_envs = 8
+
+    avail_actions = train_envs.get_available_actions()
+
+    print('avail_actions:', avail_actions)
+    available_actions = torch.tensor(avail_actions)
+    actions_dist = Categorical(available_actions)
+    random_actions = actions_dist.sample().numpy()
+    print('random_actions: ', random_actions)
+    print('random_actions shape: ', random_actions.shape)
+
+    results = train_envs.step(random_actions)
+    print('Step:', results)
     train_envs.close()
