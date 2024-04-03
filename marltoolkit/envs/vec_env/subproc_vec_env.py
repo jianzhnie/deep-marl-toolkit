@@ -12,10 +12,8 @@ from gymnasium.error import (AlreadyPendingCallError, ClosedEnvironmentError,
                              CustomSpaceError, NoAsyncCallError)
 from gymnasium.vector.utils import (clear_mpi_env_vars, concatenate,
                                     create_empty_array, create_shared_memory,
-                                    iterate, read_from_shared_memory,
+                                    read_from_shared_memory,
                                     write_to_shared_memory)
-
-from marltoolkit.utils.util import flatten_list
 
 from .base_vec_env import BaseVecEnv, CloudpickleWrapper
 
@@ -82,7 +80,7 @@ class SubprocVecEnv(BaseVecEnv):
         obs_space: Optional[gym.Space] = None,
         state_space: Optional[gym.Space] = None,
         action_space: Optional[gym.Space] = None,
-        start_method: Optional[str] = None,
+        start_method: Optional[str] = 'spawn',
         shared_memory: bool = False,
         copy: bool = True,
     ) -> None:
@@ -106,6 +104,11 @@ class SubprocVecEnv(BaseVecEnv):
             obs_space = obs_space or dummy_env.obs_space
             state_space = state_space or dummy_env.state_space
             action_space = action_space or dummy_env.action_space
+
+        self.obs_dim = dummy_env.obs_dim
+        self.state_dim = dummy_env.state_dim
+        self.action_dim = dummy_env.action_dim
+        self.num_agents = dummy_env.num_agents
 
         dummy_env.close()
         del dummy_env
@@ -272,6 +275,7 @@ class SubprocVecEnv(BaseVecEnv):
                                             self.observations)
             self.states = concatenate(self.single_state_space, state_lst,
                                       self.states)
+        self.buf_dones[:] = False
         return (
             (deepcopy(self.observations) if self.copy else self.observations),
             (deepcopy(self.states) if self.copy else self.states),
@@ -298,8 +302,11 @@ class SubprocVecEnv(BaseVecEnv):
                 self._state.value,
             )
 
-        actions = iterate(self.action_space, actions)
         for pipe, action in zip(self.parent_pipes, actions):
+            print('7' * 1000)
+            print(actions)
+            print(action)
+            action = action.tolist()
             pipe.send(('step', action))
         self._state = AsyncState.WAITING_STEP
 
@@ -330,26 +337,18 @@ class SubprocVecEnv(BaseVecEnv):
                 f'The call to `step_wait` has timed out after {timeout} second(s).'
             )
 
-        obs_list, state_list, rewards, dones, infos = (
-            [],
-            [],
-            [],
-            [],
-            {},
-        )
+        obs_list, state_list, infos = [], [], {}
         successes = []
-        for idx, pipe in enumerate(self.parent_pipes):
-            result, success = zip(pipe.recv())
+        for env_idx, pipe in enumerate(self.parent_pipes):
+            result, success = pipe.recv()
             successes.append(success)
             if success:
-                obs, state, rew, terminated, truncated, info = result
-
-                done = terminated or truncated
+                obs, state, reward, done, info = result
                 obs_list.append(obs)
                 state_list.append(state)
-                rewards.append(rew)
-                dones.append(done)
-                infos = self._add_info(infos, info, idx)
+                self.buf_dones[env_idx] = done
+                self.buf_rewards[env_idx] = reward
+                infos = self._add_info(infos, info, env_idx)
 
         self._raise_if_errors(successes)
         self._state = AsyncState.DEFAULT
@@ -367,8 +366,8 @@ class SubprocVecEnv(BaseVecEnv):
         return (
             deepcopy(self.observations) if self.copy else self.observations,
             deepcopy(self.states) if self.copy else self.states,
-            np.array(rewards),
-            np.array(dones, dtype=np.bool_),
+            np.copy(self.buf_rewards),
+            np.copy(self.buf_dones),
             infos,
         )
 
@@ -476,6 +475,7 @@ class SubprocVecEnv(BaseVecEnv):
         self.closed = True
 
     def get_available_actions(self, ):
+        """Get the available actions for each environment."""
         self._assert_is_running()
         if self._state != AsyncState.DEFAULT:
             raise AlreadyPendingCallError(
@@ -489,8 +489,26 @@ class SubprocVecEnv(BaseVecEnv):
         self._raise_if_errors(successes)
         self._state = AsyncState.DEFAULT
 
-        avail_actions = flatten_list(results)
-        return np.array(avail_actions)
+        avail_actions = np.stack(results,
+                                 axis=0).reshape(self.num_envs,
+                                                 self.num_agents,
+                                                 self.action_dim)
+        return avail_actions
+
+    def get_env_info(self):
+        """Get the environment information."""
+
+        self._assert_is_running()
+        if self._state != AsyncState.DEFAULT:
+            raise AlreadyPendingCallError(
+                f'Calling `get_env_info` while waiting for a pending call to `{self._state.value}` to complete',
+                self._state.value,
+            )
+        self.parent_pipes[0].send(('get_env_info', None))
+        env_info, success = self.parent_pipes[0].recv()
+        assert success, 'Failed to get environment information.'
+        self._state = AsyncState.DEFAULT
+        return env_info
 
     def _poll(self, timeout=None):
         self._assert_is_running()
@@ -614,8 +632,8 @@ def _worker(
     state_buf: Optional[np.array],
     error_queue: mp.Queue,
 ) -> None:
+    env = env_fn_wrapper()
     parent_pipe.close()
-    env = env_fn_wrapper.x()
     assert obs_buf is None
     assert state_buf is None
     while True:
@@ -629,6 +647,8 @@ def _worker(
             elif command == 'step':
                 (obs, state, reward, terminated, truncated,
                  info) = env.step(data)
+                print('step' * 1000)
+                print(info)
                 done = terminated or truncated
                 if done:
                     old_obs, old_state, old_info = obs, state, info

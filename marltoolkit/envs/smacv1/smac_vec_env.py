@@ -8,7 +8,7 @@ import numpy as np
 
 from marltoolkit.envs.smacv1.smac_env import SMACWrapperEnv
 from marltoolkit.envs.vec_env import BaseVecEnv, CloudpickleWrapper
-from marltoolkit.utils.util import combined_shape, flatten_list
+from marltoolkit.envs.vec_env.utils import combined_shape, flatten_list
 
 
 @contextlib.contextmanager
