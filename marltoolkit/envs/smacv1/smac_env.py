@@ -154,17 +154,13 @@ class SMACWrapperEnv(object):
         - Tuple: Tuple containing state, observation, concatenated observation, reward, termination flag, truncation flag, and info.
         """
 
-        print('^' * 5000)
-        print('SMACWrapperEnv.step():', actions)
         reward, terminated, info = self.env.step(actions)
-        print('SMACWrapperEnv.step():', info)
 
         if not info:
             info = self.buf_info
 
         obs = self.env.get_obs()
         state = self.env.get_state()
-        reward_n = np.array([[reward] for _ in range(self.num_agents)])
 
         self._episode_step += 1
         self._episode_score += reward
@@ -173,7 +169,7 @@ class SMACWrapperEnv(object):
         info['episode_score'] = self._episode_score
 
         truncated = True if self._episode_step >= self.episode_limit else False
-        return obs, state, reward_n, terminated, truncated, info
+        return obs, state, reward, terminated, truncated, info
 
     def get_obs_space(self, agent: AgentID) -> gym.spaces.Space:
         """Takes in agent and returns the observation space for that agent.
@@ -203,7 +199,6 @@ class SMACWrapperEnv(object):
             'n_actions': self.n_actions,
             'action_space': self.action_space,
             'num_agents': self.num_agents,
-            'available_actions': self.get_available_actions(),
             'episode_limit': self.episode_limit,
         }
         return env_info

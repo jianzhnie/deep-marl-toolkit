@@ -167,6 +167,7 @@ class BaseVecEnv(ABC):
         Returns:
             Tuple[Union[np.ndarray, Dict[str, np.ndarray]], np.ndarray, np.ndarray, List[Dict[str, Any]]]:
                 - obs: Observations after the step.
+                - state: Global State after the step.
                 - rews: Rewards obtained from the step.
                 - dones: "Episode done" booleans for each environment.
                 - infos: A list of info objects for each environment.
@@ -183,6 +184,7 @@ class BaseVecEnv(ABC):
         Returns:
             Tuple[Union[np.ndarray, Dict[str, np.ndarray]], np.ndarray, np.ndarray, List[Dict[str, Any]]]:
                 - obs: Observations after the step.
+                - state: Global State after the step.
                 - rews: Rewards obtained from the step.
                 - dones: "Episode done" booleans for each environment.
                 - infos: A list of info objects for each environment.

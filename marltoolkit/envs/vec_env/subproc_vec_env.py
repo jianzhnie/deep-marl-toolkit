@@ -303,10 +303,6 @@ class SubprocVecEnv(BaseVecEnv):
             )
 
         for pipe, action in zip(self.parent_pipes, actions):
-            print('7' * 1000)
-            print(actions)
-            print(action)
-            action = action.tolist()
             pipe.send(('step', action))
         self._state = AsyncState.WAITING_STEP
 
@@ -647,8 +643,6 @@ def _worker(
             elif command == 'step':
                 (obs, state, reward, terminated, truncated,
                  info) = env.step(data)
-                print('step' * 1000)
-                print(info)
                 done = terminated or truncated
                 if done:
                     old_obs, old_state, old_info = obs, state, info
