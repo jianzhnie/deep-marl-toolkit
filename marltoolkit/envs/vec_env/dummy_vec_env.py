@@ -48,7 +48,8 @@ class DummyVecEnv(BaseVecEnv):
         # As we support `make_vec(spec)` then we can't include a `spec = self.envs[0].spec` as this doesn't guarantee we can actual recreate the vector env.
         self.num_envs = len(self.envs)
 
-        if (obs_space is None) or (action_space is None):
+        if (obs_space is None) or (state_space is None) or (action_space is
+                                                            None):
             obs_space = obs_space or self.envs[0].obs_space
             state_space = state_space or self.envs[0].state_space
             action_space = action_space or self.envs[0].action_space

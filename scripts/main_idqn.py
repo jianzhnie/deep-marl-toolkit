@@ -15,8 +15,8 @@ from configs.arguments import get_common_args
 from configs.idqn_config import IDQNConfig
 from marltoolkit.agents import IDQNAgent
 from marltoolkit.data import MaReplayBuffer
-from marltoolkit.envs import SC2EnvWrapper
-from marltoolkit.modules.actors import RNNModel
+from marltoolkit.envs.smacv1.env_wrapper import SC2EnvWrapper
+from marltoolkit.modules.actors import RNNActor
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
                                                 run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
@@ -43,7 +43,7 @@ def main():
     args.episode_limit = env.episode_limit
     args.obs_shape = env.obs_shape
     args.state_shape = env.state_shape
-    args.n_agents = env.n_agents
+    args.num_agents = env.num_agents
     args.n_actions = env.n_actions
     args.device = device
 
@@ -80,13 +80,13 @@ def main():
         episode_limit=args.episode_limit,
         state_shape=args.state_shape,
         obs_shape=args.obs_shape,
-        num_agents=args.n_agents,
+        num_agents=args.num_agents,
         num_actions=args.n_actions,
         device=args.device,
     )
 
-    agent_model = RNNModel(
-        input_shape=args.obs_shape,
+    agent_model = RNNActor(
+        input_dim=args.obs_shape,
         rnn_hidden_dim=args.rnn_hidden_dim,
         n_actions=args.n_actions,
     )
@@ -94,7 +94,7 @@ def main():
     marl_agent = IDQNAgent(
         agent_model=agent_model,
         mixer_model=None,
-        n_agents=args.n_agents,
+        num_agents=args.num_agents,
         double_q=args.double_q,
         total_steps=args.total_steps,
         gamma=args.gamma,

@@ -25,13 +25,13 @@ def get_common_args():
     parser.add_argument(
         '--num_train_envs',
         type=int,
-        default=10,
+        default=2,
         help='Num of parallel threads running the env',
     )
     parser.add_argument(
         '--num_test_envs',
         type=int,
-        default=10,
+        default=1,
         help='Num of parallel threads running the env',
     )
     parser.add_argument('--seed', type=int, default=123, help='random seed')

@@ -28,7 +28,8 @@ class QMixAgent(BaseAgent):
         self,
         agent_model: nn.Module = None,
         mixer_model: nn.Module = None,
-        n_agents: int = None,
+        num_envs: int = 1,
+        num_agents: int = None,
         double_q: bool = True,
         total_steps: int = 1e6,
         gamma: float = 0.99,
@@ -47,13 +48,15 @@ class QMixAgent(BaseAgent):
         check_model_method(agent_model, 'forward', self.__class__.__name__)
         if mixer_model is not None:
             check_model_method(mixer_model, 'forward', self.__class__.__name__)
-            assert hasattr(mixer_model, 'n_agents') and not callable(
-                getattr(mixer_model, 'n_agents',
-                        None)), 'mixer_model needs to have attribute n_agents'
+            assert hasattr(mixer_model, 'num_agents') and not callable(
+                getattr(
+                    mixer_model, 'num_agents',
+                    None)), 'mixer_model needs to have attribute num_agents'
         assert isinstance(gamma, float)
         assert isinstance(learning_rate, float)
 
-        self.n_agents = n_agents
+        self.num_envs = num_envs
+        self.num_agents = num_agents
         self.double_q = double_q
         self.gamma = gamma
         self.learning_rate = learning_rate
@@ -105,27 +108,26 @@ class QMixAgent(BaseAgent):
         self.hidden_states = self.agent_model.init_hidden()
         if self.hidden_states is not None:
             self.hidden_states = self.hidden_states.unsqueeze(0).expand(
-                batch_size, self.n_agents, -1)
+                batch_size, self.num_agents, -1)
 
         self.target_hidden_states = self.target_agent_model.init_hidden()
         if self.target_hidden_states is not None:
             self.target_hidden_states = self.target_hidden_states.unsqueeze(
-                0).expand(batch_size, self.n_agents, -1)
+                0).expand(batch_size, self.num_agents, -1)
 
     def sample(self, obs: torch.Tensor, available_actions: torch.Tensor):
         """sample actions via epsilon-greedy
         Args:
-            obs (np.ndarray):               (n_agents, obs_shape)
-            available_actions (np.ndarray): (n_agents, n_actions)
+            obs (np.ndarray):               (num_agents, obs_shape)
+            available_actions (np.ndarray): (num_agents, n_actions)
         Returns:
             actions (np.ndarray): sampled actions of agents
         """
         epsilon = np.random.random()
         if epsilon < self.exploration:
-            available_actions = torch.tensor(available_actions,
-                                             dtype=torch.float32)
+            available_actions = torch.tensor(available_actions)
             actions_dist = Categorical(available_actions)
-            actions = actions_dist.sample().long().cpu().detach().numpy()
+            actions = actions_dist.sample().numpy()
 
         else:
             actions = self.predict(obs, available_actions)
@@ -137,10 +139,10 @@ class QMixAgent(BaseAgent):
     def predict(self, obs: torch.Tensor, available_actions: torch.Tensor):
         """take greedy actions
         Args:
-            obs (np.ndarray):               (n_agents, obs_shape)
-            available_actions (np.ndarray): (n_agents, n_actions)
+            obs (np.ndarray):               (num_agents, obs_shape)
+            available_actions (np.ndarray): (num_agents, n_actions)
         Returns:
-            actions (np.ndarray):           (n_agents, )
+            actions (np.ndarray):           (num_agents, )
         """
         obs = torch.tensor(obs, dtype=torch.float32, device=self.device)
         available_actions = torch.tensor(available_actions,
@@ -172,11 +174,11 @@ class QMixAgent(BaseAgent):
         """
         Args:
             state (np.ndarray):                   (batch_size, T, state_shape)
-            actions (np.ndarray):                 (batch_size, T, n_agents)
+            actions (np.ndarray):                 (batch_size, T, num_agents)
             reward (np.ndarray):                  (batch_size, T, 1)
             terminated (np.ndarray):              (batch_size, T, 1)
-            obs (np.ndarray):                     (batch_size, T, n_agents, obs_shape)
-            available_actions_batch (np.ndarray): (batch_size, T, n_agents, n_actions)
+            obs (np.ndarray):                     (batch_size, T, num_agents, obs_shape)
+            available_actions_batch (np.ndarray): (batch_size, T, num_agents, n_actions)
             filled_batch (np.ndarray):            (batch_size, T, 1)
         Returns:
             mean_loss (float): train loss
@@ -209,20 +211,21 @@ class QMixAgent(BaseAgent):
         self._init_hidden_states(batch_size)
         for t in range(episode_len):
             obs = obs_batch[:, t, :, :]
-            # obs: (batch_size * n_agents, obs_shape)
+            # obs: (batch_size * num_agents, obs_shape)
             obs = obs.reshape(-1, obs_batch.shape[-1])
             # Calculate estimated Q-Values
             local_q, self.hidden_states = self.agent_model(
                 obs, self.hidden_states)
-            #  local_q: (batch_size * n_agents, n_actions) -->  (batch_size, n_agents, n_actions)
-            local_q = local_q.reshape(batch_size, self.n_agents, -1)
+            #  local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
+            local_q = local_q.reshape(batch_size, self.num_agents, -1)
             local_qs.append(local_q)
 
             # Calculate the Q-Values necessary for the target
             target_local_q, self.target_hidden_states = self.target_agent_model(
                 obs, self.target_hidden_states)
-            # target_local_q: (batch_size * n_agents, n_actions) -->  (batch_size, n_agents, n_actions)
-            target_local_q = target_local_q.view(batch_size, self.n_agents, -1)
+            # target_local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
+            target_local_q = target_local_q.view(batch_size, self.num_agents,
+                                                 -1)
             target_local_qs.append(target_local_q)
 
         # Concat over time

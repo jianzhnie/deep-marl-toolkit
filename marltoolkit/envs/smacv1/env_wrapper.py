@@ -13,12 +13,13 @@ class SC2EnvWrapper(object):
         env_info = env.get_env_info()
         self.episode_limit = env_info['episode_limit']
         self.n_actions = env_info['n_actions']
-        self.n_agents = env_info['n_agents']
+        self.num_agents = env_info['n_agents']
         self.state_shape = env_info['state_shape']
-        self.obs_shape = env_info['obs_shape'] + self.n_agents + self.n_actions
-        self.agent_id_one_hot_transform = OneHotTransform(self.n_agents)
+        self.obs_shape = env_info[
+            'obs_shape'] + self.num_agents + self.n_actions
+        self.agent_id_one_hot_transform = OneHotTransform(self.num_agents)
         self.actions_one_hot_transform = OneHotTransform(self.n_actions)
-        self._init_agents_id_one_hot(self.n_agents)
+        self._init_agents_id_one_hot(self.num_agents)
 
     @property
     def win_counted(self):
@@ -45,7 +46,7 @@ class SC2EnvWrapper(object):
     def get_available_actions(self):
         # (n_agents，n_actions)
         available_actions = []
-        for agent_id in range(self.n_agents):
+        for agent_id in range(self.num_agents):
             available_actions.append(
                 self.env.get_avail_agent_actions(agent_id))
         return np.array(available_actions)
@@ -54,7 +55,7 @@ class SC2EnvWrapper(object):
         self.env.reset()
         # action at last timestep
         # last_actions_one_hot shape: (self.n_agents, self.n_actions)
-        last_actions_one_hot = np.zeros((self.n_agents, self.n_actions),
+        last_actions_one_hot = np.zeros((self.num_agents, self.n_actions),
                                         dtype='float32')
 
         # obs shape: (self.n_agents, obs_dim)

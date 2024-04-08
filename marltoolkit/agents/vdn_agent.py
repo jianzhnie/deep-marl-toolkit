@@ -28,7 +28,9 @@ class VDNAgent(BaseAgent):
         self,
         agent_model: nn.Module = None,
         mixer_model: nn.Module = None,
+        num_envs: int = 1,
         num_agents: int = None,
+        action_dim: int = None,
         double_q: bool = True,
         total_steps: int = 1e6,
         gamma: float = 0.99,
@@ -51,7 +53,9 @@ class VDNAgent(BaseAgent):
         assert isinstance(gamma, float)
         assert isinstance(learning_rate, float)
 
+        self.num_envs = num_envs
         self.num_agents = num_agents
+        self.action_dim = action_dim
         self.double_q = double_q
         self.gamma = gamma
         self.learning_rate = learning_rate
@@ -108,7 +112,7 @@ class VDNAgent(BaseAgent):
             self.target_hidden_states = self.target_hidden_states.unsqueeze(
                 0).expand(batch_size, self.num_agents, -1)
 
-    def sample(self, obs, available_actions):
+    def sample(self, obs: np.array, available_actions: np.array):
         """sample actions via epsilon-greedy
         Args:
             obs (np.ndarray):               (num_agents, obs_shape)
@@ -118,16 +122,22 @@ class VDNAgent(BaseAgent):
         """
         epsilon = np.random.random()
         if epsilon < self.exploration:
-            available_actions = torch.tensor(available_actions,
-                                             dtype=torch.float32)
-            actions_dist = Categorical(available_actions)
-            actions = actions_dist.sample().long().cpu().detach().numpy()
+            if available_actions is None:
+                random_actions = np.random.choice(
+                    self.action_dim, [self.num_envs, self.num_agents])
+            else:
+                available_actions = torch.tensor(available_actions)
+                actions_dist = Categorical(available_actions)
+                random_actions = actions_dist.sample().numpy()
+
+            actions = random_actions
 
         else:
             actions = self.predict(obs, available_actions)
 
         # update exploration
         self.exploration = max(self.ep_scheduler.step(), self.min_exploration)
+
         return actions
 
     def predict(self, obs, available_actions):

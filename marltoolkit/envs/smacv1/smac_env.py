@@ -1,10 +1,13 @@
-from typing import List, Tuple, Union
+from typing import List, Tuple, TypeVar, Union
 
+import gymnasium as gym
 import numpy as np
 from gymnasium.spaces import Box, Dict, Discrete
 from smac.env import StarCraft2Env
 
 from marltoolkit.envs.base_env import MultiAgentEnv
+
+AgentID = TypeVar('AgentID')
 
 
 class SMACWrapperEnv(object):
@@ -16,40 +19,57 @@ class SMACWrapperEnv(object):
         Parameters:
         - map_name (str): Name of the map for the StarCraft2 environment.
         """
+        map_name = map_name if isinstance(map_name,
+                                          str) else kwargs['map_name']
         self.env = StarCraft2Env(map_name=map_name, **kwargs)
         self.env_info = self.env.get_env_info()
 
         # Number of agents and enemies
         self.num_agents = self.env.n_agents
         self.num_enemies = self.env.n_enemies
+        self.agents = ['agent_{}'.format(i) for i in range(self.num_agents)]
 
         # Number of actions
-        self.action_shape = self.env_info['n_actions']
+        self.action_dim = self.env_info['n_actions']
         self.n_actions = self.env_info['n_actions']
 
-        # State and observation shapes
-        self.obs_shape = self.env_info['obs_shape']
-        self.state_shape = self.env_info['state_shape']
+        # State and observation dims
+        self.obs_dim = self.env_info['obs_shape']
+        self.state_dim = self.env_info['state_shape']
 
         # Reward and done shapes
-        self.reward_dim = self.num_agents
-        self.done_dim = self.num_agents
+        self.reward_dim = 1
+        self.done_dim = 1
+
+        # Observation and state shapes
+        self.obs_shape = (self.num_agents, self.obs_dim)
+        self.action_shape = (self.num_agents, self.action_dim)
+        self.state_shape = (self.state_dim, )
+        self.reward_shape = (self.reward_dim, )
+        self.done_shape = (self.done_dim, )
 
         # Space
         self.obs_space = Box(
-            -2.0,
-            2.0,
+            -np.inf,
+            np.inf,
             shape=(
                 self.num_agents,
-                self.obs_shape,
+                self.obs_dim,
             ),
         )
-        self.state_space = Box(-2.0, 2.0, shape=(self.state_shape, ))
-        self.action_mask_space = Box(-2.0, 2.0, shape=(self.n_actions, ))
+        self.state_space = Box(-np.inf, np.inf, shape=(self.state_dim, ))
         self.action_space = Discrete(self.n_actions)
 
-        self.reward_space = (self.reward_dim, )
-        self.done_space = (self.done_dim, )
+        # Multi-Agent Sapces
+        self.obs_spaces: dict[AgentID, gym.spaces.Space] = {}
+        self.action_spaces: dict[AgentID, gym.spaces.Space] = {}
+        for agent_id in self.agents:
+            self.obs_spaces[agent_id] = Box(
+                -np.inf,
+                np.inf,
+                shape=(self.obs_dim, ),
+            )
+            self.action_spaces[agent_id] = Discrete(self.n_actions)
 
         # Max episode steps
         self.episode_limit = self.env_info['episode_limit']
@@ -81,6 +101,14 @@ class SMACWrapperEnv(object):
     def get_available_actions(self):
         return self.env.get_avail_actions()
 
+    def get_available_agent_actions(self):
+        action_dict = {}
+        for agent_index in range(self.num_agents):
+            agent_index = 'agent_{}'.format(agent_index)
+            action_dict[agent_index] = self.env.get_avail_agent_actions(
+                agent_index)
+        return action_dict
+
     def close(self):
         """Close the environment."""
         self.env.close()
@@ -100,13 +128,21 @@ class SMACWrapperEnv(object):
         - Tuple: Tuple containing state, observation, concatenated observation, and info.
         """
         obs, state = self.env.reset()
+        obs_dict, state_dict = {}, {}
+        for agent_index in range(self.num_agents):
+            obs_one_agent = obs[agent_index]
+            state_one_agent = state
+            agent_index = 'agent_{}'.format(agent_index)
+            obs_dict[agent_index] = obs_one_agent
+            state_dict[agent_index] = state_one_agent
+
         self._episode_step = 0
-        self._episode_score = 0.0
+        self._episode_score = 0
         info = {
             'episode_step': self._episode_step,
             'episode_score': self._episode_score,
         }
-        return obs, state, info
+        return np.array(obs), np.array(state), info
 
     def step(self, actions: Union[np.ndarray, List[int]]) -> Tuple:
         """Take a step in the environment.
@@ -117,6 +153,7 @@ class SMACWrapperEnv(object):
         Returns:
         - Tuple: Tuple containing state, observation, concatenated observation, reward, termination flag, truncation flag, and info.
         """
+
         reward, terminated, info = self.env.step(actions)
 
         if not info:
@@ -124,7 +161,6 @@ class SMACWrapperEnv(object):
 
         obs = self.env.get_obs()
         state = self.env.get_state()
-        reward_n = np.array([[reward] for _ in range(self.num_agents)])
 
         self._episode_step += 1
         self._episode_score += reward
@@ -133,7 +169,32 @@ class SMACWrapperEnv(object):
         info['episode_score'] = self._episode_score
 
         truncated = True if self._episode_step >= self.episode_limit else False
-        return obs, state, reward_n, terminated, truncated, info
+        return (
+            np.array(obs),
+            np.array(state),
+            np.array(reward),
+            terminated,
+            truncated,
+            info,
+        )
+
+    def get_obs_space(self, agent: AgentID) -> gym.spaces.Space:
+        """Takes in agent and returns the observation space for that agent.
+
+        MUST return the same value for the same agent name
+
+        Default implementation is to return the observation_spaces dict
+        """
+        return self.obs_spaces[agent]
+
+    def get_action_space(self, agent: AgentID) -> gym.spaces.Space:
+        """Takes in agent and returns the action space for that agent.
+
+        MUST return the same value for the same agent name
+
+        Default implementation is to return the action_spaces dict
+        """
+        return self.action_spaces[agent]
 
     def get_env_info(self):
         """Get the environment information."""
@@ -142,7 +203,6 @@ class SMACWrapperEnv(object):
             'obs_space': self.obs_space,
             'state_shape': self.state_shape,
             'state_space': self.state_space,
-            'action_mask_space': self.action_mask_space,
             'n_actions': self.n_actions,
             'action_space': self.action_space,
             'num_agents': self.num_agents,
@@ -168,7 +228,7 @@ class RLlibSMAC(MultiAgentEnv):
             'state':
             Box(-2.0, 2.0, shape=(state_shape, )),
             'action_mask':
-            Box(-2.0, 2.0, shape=(n_actions, ))
+            Box(-2.0, 2.0, shape=(n_actions, )),
         })
         self.action_space = Discrete(n_actions)
 
@@ -193,7 +253,6 @@ class RLlibSMAC(MultiAgentEnv):
         return obs_dict
 
     def step(self, actions):
-
         actions_ls = [int(actions[agent_id]) for agent_id in actions.keys()]
 
         reward, terminated, info = self.env.step(actions_ls)
@@ -213,7 +272,7 @@ class RLlibSMAC(MultiAgentEnv):
             obs_dict[agent_index] = {
                 'obs': obs_one_agent,
                 'state': state_one_agent,
-                'action_mask': action_mask_one_agent
+                'action_mask': action_mask_one_agent,
             }
             reward_dict[agent_index] = reward
 

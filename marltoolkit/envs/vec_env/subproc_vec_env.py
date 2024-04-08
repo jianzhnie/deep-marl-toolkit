@@ -12,7 +12,7 @@ from gymnasium.error import (AlreadyPendingCallError, ClosedEnvironmentError,
                              CustomSpaceError, NoAsyncCallError)
 from gymnasium.vector.utils import (clear_mpi_env_vars, concatenate,
                                     create_empty_array, create_shared_memory,
-                                    iterate, read_from_shared_memory,
+                                    read_from_shared_memory,
                                     write_to_shared_memory)
 
 from .base_vec_env import BaseVecEnv, CloudpickleWrapper
@@ -80,8 +80,8 @@ class SubprocVecEnv(BaseVecEnv):
         obs_space: Optional[gym.Space] = None,
         state_space: Optional[gym.Space] = None,
         action_space: Optional[gym.Space] = None,
-        start_method: Optional[str] = None,
-        shared_memory: bool = True,
+        start_method: Optional[str] = 'spawn',
+        shared_memory: bool = False,
         copy: bool = True,
     ) -> None:
         self.env_fns = env_fns
@@ -104,6 +104,11 @@ class SubprocVecEnv(BaseVecEnv):
             obs_space = obs_space or dummy_env.obs_space
             state_space = state_space or dummy_env.state_space
             action_space = action_space or dummy_env.action_space
+
+        self.obs_dim = dummy_env.obs_dim
+        self.state_dim = dummy_env.state_dim
+        self.action_dim = dummy_env.action_dim
+        self.num_agents = dummy_env.num_agents
 
         dummy_env.close()
         del dummy_env
@@ -140,6 +145,10 @@ class SubprocVecEnv(BaseVecEnv):
             self.states = create_empty_array(self.single_state_space,
                                              n=self.num_envs,
                                              fn=np.zeros)
+
+        self.buf_rewards = np.zeros((self.num_envs, 1), dtype=np.float32)
+        self.buf_dones = np.zeros((self.num_envs, 1), dtype=np.bool_)
+
         self.parent_pipes, self.processes = [], []
         self.error_queue = ctx.Queue()
         target = _shareworker if self.shared_memory else _worker
@@ -266,6 +275,7 @@ class SubprocVecEnv(BaseVecEnv):
                                             self.observations)
             self.states = concatenate(self.single_state_space, state_lst,
                                       self.states)
+        self.buf_dones[:] = False
         return (
             (deepcopy(self.observations) if self.copy else self.observations),
             (deepcopy(self.states) if self.copy else self.states),
@@ -292,7 +302,6 @@ class SubprocVecEnv(BaseVecEnv):
                 self._state.value,
             )
 
-        actions = iterate(self.action_space, actions)
         for pipe, action in zip(self.parent_pipes, actions):
             pipe.send(('step', action))
         self._state = AsyncState.WAITING_STEP
@@ -324,27 +333,18 @@ class SubprocVecEnv(BaseVecEnv):
                 f'The call to `step_wait` has timed out after {timeout} second(s).'
             )
 
-        obs_list, state_list, rewards, dones, infos = (
-            [],
-            [],
-            [],
-            [],
-            [],
-            {},
-        )
+        obs_list, state_list, infos = [], [], {}
         successes = []
-        for idx, pipe in enumerate(self.parent_pipes):
-            result, success = zip(pipe.recv())
+        for env_idx, pipe in enumerate(self.parent_pipes):
+            result, success = pipe.recv()
             successes.append(success)
             if success:
-                obs, state, rew, terminated, truncated, info = result
-
-                done = terminated or truncated
+                obs, state, reward, done, info = result
                 obs_list.append(obs)
                 state_list.append(state)
-                rewards.append(rew)
-                dones.append(done)
-                infos = self._add_info(infos, info, idx)
+                self.buf_dones[env_idx] = done
+                self.buf_rewards[env_idx] = reward
+                infos = self._add_info(infos, info, env_idx)
 
         self._raise_if_errors(successes)
         self._state = AsyncState.DEFAULT
@@ -362,8 +362,8 @@ class SubprocVecEnv(BaseVecEnv):
         return (
             deepcopy(self.observations) if self.copy else self.observations,
             deepcopy(self.states) if self.copy else self.states,
-            np.array(rewards),
-            np.array(dones, dtype=np.bool_),
+            np.copy(self.buf_rewards),
+            np.copy(self.buf_dones),
             infos,
         )
 
@@ -469,6 +469,42 @@ class SubprocVecEnv(BaseVecEnv):
         for process in self.processes:
             process.join()
         self.closed = True
+
+    def get_available_actions(self, ):
+        """Get the available actions for each environment."""
+        self._assert_is_running()
+        if self._state != AsyncState.DEFAULT:
+            raise AlreadyPendingCallError(
+                f'Calling `get_available_actions` while waiting for a pending call to `{self._state.value}` to complete',
+                self._state.value,
+            )
+        for pipe in self.parent_pipes:
+            pipe.send(('get_available_actions', None))
+
+        results, successes = zip(*[pipe.recv() for pipe in self.parent_pipes])
+        self._raise_if_errors(successes)
+        self._state = AsyncState.DEFAULT
+
+        avail_actions = np.stack(results,
+                                 axis=0).reshape(self.num_envs,
+                                                 self.num_agents,
+                                                 self.action_dim)
+        return avail_actions
+
+    def get_env_info(self):
+        """Get the environment information."""
+
+        self._assert_is_running()
+        if self._state != AsyncState.DEFAULT:
+            raise AlreadyPendingCallError(
+                f'Calling `get_env_info` while waiting for a pending call to `{self._state.value}` to complete',
+                self._state.value,
+            )
+        self.parent_pipes[0].send(('get_env_info', None))
+        env_info, success = self.parent_pipes[0].recv()
+        assert success, 'Failed to get environment information.'
+        self._state = AsyncState.DEFAULT
+        return env_info
 
     def _poll(self, timeout=None):
         self._assert_is_running()
@@ -592,8 +628,8 @@ def _worker(
     state_buf: Optional[np.array],
     error_queue: mp.Queue,
 ) -> None:
+    env = env_fn_wrapper()
     parent_pipe.close()
-    env = env_fn_wrapper.x()
     assert obs_buf is None
     assert state_buf is None
     while True:
@@ -617,6 +653,14 @@ def _worker(
                     info['final_info'] = old_info
                 child_pipe.send(((obs, state, reward, done, info), True))
 
+            elif command == 'get_available_actions':
+                available_actions = env.get_available_actions()
+                child_pipe.send((available_actions, True))
+
+            elif command == 'get_env_info':
+                env_info = env.get_env_info()
+                child_pipe.send((env_info, True))
+
             elif command == 'seed':
                 env.seed(data)
                 child_pipe.send((None, True))
@@ -627,7 +671,14 @@ def _worker(
 
             elif command == '_call':
                 name, args, kwargs = data
-                if name in ['reset', 'step', 'seed', 'close']:
+                if name in [
+                        'reset',
+                        'step',
+                        'seed',
+                        'close',
+                        'get_available_actions',
+                        'get_env_info',
+                ]:
                     raise ValueError(
                         f'Trying to call function `{name}` with '
                         f'`_call`. Use `{name}` directly instead.')
@@ -653,8 +704,11 @@ def _worker(
             else:
                 raise RuntimeError(
                     f'Received unknown command `{command}`. Must '
-                    'be one of {`reset`, `step`, `seed`, `close`, `_call`, '
-                    '`_setattr`, `_check_spaces`}.')
+                    'be one of {`reset`, `step`, `seed`, `close`, `_call`, ',
+                    'get_available_actions',
+                    'get_env_info',
+                    '`_setattr`, `_check_spaces`}.',
+                )
         except (KeyboardInterrupt, Exception):
             error_queue.put((index, ) + sys.exc_info()[:2])
             child_pipe.send((None, False))

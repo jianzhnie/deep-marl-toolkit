@@ -3,44 +3,59 @@ import argparse
 import numpy as np
 
 from marltoolkit.agents import BaseAgent
-from marltoolkit.data import OffPolicyBufferRNN
-from marltoolkit.envs import BaseVecEnv
+from marltoolkit.data import EpisodeData, MaReplayBuffer
+from marltoolkit.envs import MultiAgentEnv
 
 
 def run_train_episode(
-    envs: BaseVecEnv,
+    env: MultiAgentEnv,
     agent: BaseAgent,
-    rpm: OffPolicyBufferRNN,
+    rpm: MaReplayBuffer,
     args: argparse.Namespace = None,
 ):
-
     episode_limit = args.episode_limit
     agent.reset_agent()
     episode_reward = 0.0
     episode_step = 0
-    state, obs = envs.reset()
-    envs_done = envs.buf_done
-    num_envs = envs.num_envs
-    filled = np.zeros([num_envs, episode_limit, 1], dtype=np.int32)
-    while not envs_done.all():
-        available_actions = envs.get_available_actions()
+    terminated = False
+    state, obs = env.reset()
+    episode_experience = EpisodeData(
+        episode_limit=episode_limit,
+        state_shape=args.state_shape,
+        obs_shape=args.obs_shape,
+        num_actions=args.n_actions,
+        num_agents=args.num_agents,
+    )
+
+    while not terminated:
+        available_actions = env.get_available_actions()
         actions = agent.sample(obs, available_actions)
-        next_state, next_obs, reward, terminated, truncated, info = envs.step(
-            actions)
-        filled[:, episode_step] = np.ones([num_envs, 1])
-        envs_done = envs.buf_done
+        actions_onehot = env._get_actions_one_hot(actions)
+        next_state, next_obs, reward, terminated = env.step(actions)
         episode_reward += reward
         episode_step += 1
+        episode_experience.add(
+            state,
+            obs,
+            actions,
+            actions_onehot,
+            available_actions,
+            reward,
+            terminated,
+            0,
+        )
+        state = next_state
         obs = next_obs
-        rpm.store_transitions()
 
-        for env_idx in range(num_envs):
-            if envs_done[env_idx]:
-                filled[env_idx, episode_step, 0] = 0
+    # fill the episode
+    for _ in range(episode_step, episode_limit):
+        episode_experience.fill_mask()
 
-            if terminated[env_idx] or truncated[env_idx]:
-                pass
-    rpm.store_episodes()
+    episode_data = episode_experience.get_data()
+
+    rpm.store(**episode_data)
+    is_win = env.win_counted
+
     mean_loss = []
     mean_td_error = []
     if rpm.size() > args.memory_warmup_size:
@@ -53,11 +68,11 @@ def run_train_episode(
     mean_loss = np.mean(mean_loss) if mean_loss else None
     mean_td_error = np.mean(mean_td_error) if mean_td_error else None
 
-    return episode_reward, episode_step, mean_loss, mean_td_error
+    return episode_reward, episode_step, is_win, mean_loss, mean_td_error
 
 
 def run_evaluate_episode(
-    env: BaseVecEnv,
+    env: MultiAgentEnv,
     agent: BaseAgent,
     num_eval_episodes: int = 5,
 ):

@@ -1,11 +1,13 @@
 import inspect
 from abc import ABC
+from collections.abc import Callable
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import cloudpickle
 import numpy as np
 from gymnasium import logger, spaces
+from gymnasium.core import Env
 from gymnasium.vector.utils.spaces import batch_space
 
 __all__ = ['BaseVecEnv', 'VecEnvWrapper', 'CloudpickleWrapper']
@@ -150,6 +152,7 @@ class BaseVecEnv(ABC):
         Args:
             actions: Actions to take in each environment.
         """
+        pass
 
     def step_wait(
         self,
@@ -164,11 +167,12 @@ class BaseVecEnv(ABC):
         Returns:
             Tuple[Union[np.ndarray, Dict[str, np.ndarray]], np.ndarray, np.ndarray, List[Dict[str, Any]]]:
                 - obs: Observations after the step.
+                - state: Global State after the step.
                 - rews: Rewards obtained from the step.
                 - dones: "Episode done" booleans for each environment.
                 - infos: A list of info objects for each environment.
         """
-        raise NotImplementedError
+        pass
 
     def step(self, actions: Union[np.ndarray, List[Any]]):
         """Perform a synchronous step: call step_async() and then wait for the
@@ -180,6 +184,7 @@ class BaseVecEnv(ABC):
         Returns:
             Tuple[Union[np.ndarray, Dict[str, np.ndarray]], np.ndarray, np.ndarray, List[Dict[str, Any]]]:
                 - obs: Observations after the step.
+                - state: Global State after the step.
                 - rews: Rewards obtained from the step.
                 - dones: "Episode done" booleans for each environment.
                 - infos: A list of info objects for each environment.
@@ -465,13 +470,13 @@ class CloudpickleWrapper:
     """Wrapper class that uses cloudpickle to serialize contents, enabling
     proper serialization for multiprocessing."""
 
-    def __init__(self, x) -> None:
+    def __init__(self, fn: Callable[[], Env]) -> None:
         """Initialize the CloudpickleWrapper with the given object.
 
         Args:
             x: The object to be wrapped and serialized.
         """
-        self.x = x
+        self.fn = fn
 
     def __getstate__(self) -> bytes:
         """Get the state of the object for serialization using cloudpickle.
@@ -479,13 +484,17 @@ class CloudpickleWrapper:
         Returns:
             bytes: Serialized representation of the object using cloudpickle.
         """
-        return cloudpickle.dumps(self.x)
+        return cloudpickle.dumps(self.fn)
 
-    def __setstate__(self, x: Any) -> None:
+    def __setstate__(self, obj: Any) -> None:
         """Set the state of the object by deserializing using pickle.
 
         Args:
             ob: Serialized representation of the object.
         """
 
-        self.x = cloudpickle.loads(x)
+        self.fn = cloudpickle.loads(obj)
+
+    def __call__(self):
+        """Calls the function `self.fn` with no arguments."""
+        return self.fn()
