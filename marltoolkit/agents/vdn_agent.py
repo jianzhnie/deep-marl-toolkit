@@ -125,12 +125,10 @@ class VDNAgent(BaseAgent):
             if available_actions is None:
                 random_actions = np.random.choice(
                     self.action_dim, [self.num_envs, self.num_agents])
-                print('random_actions: ', random_actions)
             else:
                 available_actions = torch.tensor(available_actions)
                 actions_dist = Categorical(available_actions)
                 random_actions = actions_dist.sample().numpy()
-                print('random_actions: ', random_actions)
 
             actions = random_actions
 

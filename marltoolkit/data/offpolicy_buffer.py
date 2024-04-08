@@ -460,7 +460,8 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
         self.episode_data.episode_buffer['available_actions'][
             epi_step, env_idx] = (available_actions[env_idx])
         self.episode_data.episode_buffer['filled'][epi_step,
-                                                   env_idx] = filled[env_idx]
+                                                   env_idx] = filled[epi_step,
+                                                                     env_idx]
 
     def sample(self,
                batch_size: int = 32,

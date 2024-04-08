@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 
 from marltoolkit.agents import BaseAgent
-from marltoolkit.data import OffPolicyBufferRNN
+from marltoolkit.data import MaEpisodeData, OffPolicyBufferRNN
 from marltoolkit.envs import BaseVecEnv
 
 
@@ -13,30 +13,63 @@ def run_train_episode(
     rpm: OffPolicyBufferRNN,
     args: argparse.Namespace = None,
 ):
-    episode_limit = args.episode_limit
     agent.reset_agent()
-    episode_step, best_score = 0, -np.inf
+    # reset the environment
     obs, state, info = envs.reset()
     num_envs = envs.num_envs
+    env_dones = envs.buf_dones
+    episode_step = 0
     episode_score = np.zeros(num_envs, dtype=np.float32)
-    filled = np.zeros([num_envs, episode_limit, 1], dtype=np.int32)
-    env_dones = np.zeros((num_envs, ), dtype=np.bool_)
+    filled = np.zeros([args.episode_limit, num_envs], dtype=np.int32)
+    episode_data = MaEpisodeData(
+        num_envs,
+        args.num_agents,
+        args.episode_limit,
+        args.obs_shape,
+        args.state_shape,
+        args.action_shape,
+        args.reward_shape,
+        args.done_shape,
+    )
     while not env_dones.all():
         available_actions = envs.get_available_actions()
+        # Get actions from the agent
         actions = agent.sample(obs, available_actions)
-        next_obs, next_states, rewards, env_dones, infos = envs.step(actions)
-        filled[:, episode_step] = np.ones([num_envs, 1])
-        episode_step += 1
-        episode_score += rewards
-        obs = next_obs
-        transitions = (obs, state, actions, rewards, next_obs, next_states,
-                       env_dones)
-        rpm.store_transitions(transitions)
+        # Environment step
+        next_obs, next_state, rewards, env_dones, info = envs.step(actions)
+        # Fill the episode buffer
+        filled[episode_step, :] = np.ones(num_envs)
+        transitions = dict(
+            obs=obs,
+            state=state,
+            actions=actions,
+            rewards=rewards,
+            env_dones=env_dones,
+            available_actions=available_actions,
+        )
+        # Store the transitions
+        episode_data.store_transitions(transitions)
+        # Check if the episode is done
         for env_idx in range(num_envs):
             if env_dones[env_idx]:
-                filled[env_idx, episode_step, 0] = 0
-                if best_score < episode_score[-1]:
-                    best_score = episode_score[-1]
+                # Fill the rest of the episode with zeros
+                filled[episode_step, env_idx] = 0
+                # Get the episode score from the info
+                final_info = info['final_info']
+                episode_score[env_idx] = final_info[env_idx]['episode_score']
+                # Get the current available actions
+                available_actions = envs.get_available_actions()
+                terminal_data = (next_obs, next_state, available_actions,
+                                 filled)
+                # Finish the episode
+                rpm.finish_path(env_idx, episode_step, *terminal_data)
+
+        # Update the episode step
+        episode_step += 1
+        obs, state = next_obs, next_state
+        # Store the episode data
+        rpm.store_episodes(episode_data.episode_buffer)
+
     mean_loss = []
     mean_td_error = []
     if rpm.size() > args.memory_warmup_size:
