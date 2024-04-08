@@ -429,7 +429,6 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
         if episode_buffer is None:
             episode_buffer = self.episode_data.episode_buffer
         for key in self.buffer_keys:
-            print(key, self.buffers[key].shape, episode_buffer[key].shape)
             self.buffers[key][self.curr_ptr] = episode_buffer[key].copy()
         self.curr_ptr = (self.curr_ptr + 1) % self.max_size
         self.curr_size = min(self.curr_size + 1, self.max_size)
