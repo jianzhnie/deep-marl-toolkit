@@ -145,36 +145,38 @@ class MaEpisodeData(object):
 
     def reset(self):
         self.episode_buffer = dict(
-            obs=np.zeros((self.num_envs, self.num_agents, self.episode_limit) +
-                         self.obs_space,
-                         dtype=np.float32),
-            next_obs=np.zeros(
+            obs=np.zeros(
                 (self.num_envs, self.num_agents, self.episode_limit) +
                 self.obs_space,
-                dtype=np.float32),
+                dtype=np.float32,
+            ),
             actions=np.zeros(
                 (self.num_envs, self.num_agents, self.episode_limit) +
                 self.action_space,
-                dtype=np.int8),
+                dtype=np.int8,
+            ),
             rewards=np.zeros(
                 (self.num_envs, self.episode_limit) + self.reward_space,
-                dtype=np.float32),
+                dtype=np.float32,
+            ),
             dones=np.zeros(
                 (self.num_envs, self.episode_limit) + self.done_space,
                 dtype=bool),
             filled=np.zeros(
                 (self.num_envs, self.episode_limit) + self.done_space,
                 dtype=bool),
+            available_actions=np.zeros(
+                (self.num_envs, self.num_agents, self.episode_limit) +
+                self.action_space,
+                dtype=np.int8,
+            ),
         )
         if self.store_global_state:
             self.episode_buffer['state'] = np.zeros(
                 (self.num_envs, self.num_agents, self.episode_limit) +
                 self.state_space,
-                dtype=np.float32)
-            self.episode_buffer['next_state'] = np.zeros(
-                (self.num_envs, self.num_agents, self.episode_limit) +
-                self.state_space,
-                dtype=np.float32)
+                dtype=np.float32,
+            )
 
         # memory management
         self.curr_ptr = 0
@@ -183,21 +185,18 @@ class MaEpisodeData(object):
     def store_transitions(self, transitions: Dict[str, np.ndarray]):
         """Store transitions in the buffer."""
         self.episode_buffer['obs'][:, :, self.curr_ptr] = transitions['obs']
-        self.episode_buffer['next_obs'][:, :, self.
-                                        curr_ptr] = transitions['next_obs']
         self.episode_buffer['actions'][:, :,
                                        self.curr_ptr] = transitions['actions']
         self.episode_buffer['rewards'][:, :,
                                        self.curr_ptr] = transitions['rewards']
         self.episode_buffer['dones'][:,
                                      self.curr_ptr] = transitions['env_dones']
-        self.episode_buffer['filled'][:, self.curr_ptr] = np.ones(
-            (self.num_envs, 1))
+        self.episode_buffer['available_actions'][:, :,
+                                                 self.curr_ptr] = transitions[
+                                                     'available_actions']
         if self.store_global_state:
             self.episode_buffer['state'][:,
                                          self.curr_ptr] = transitions['state']
-            self.episode_buffer['next_state'][:, self.curr_ptr] = transitions[
-                'next_state']
 
     def size(self) -> int:
         """get current size of replay memory."""
@@ -325,9 +324,6 @@ class OffPolicyBuffer(BaseBuffer):
             self.buffers['state'] = np.zeros(
                 (self.num_envs, self.max_size) + self.state_space,
                 dtype=np.float32)
-            self.buffers['next_state'] = np.zeros(
-                (self.num_envs, self.max_size) + self.state_space,
-                dtype=np.float32)
 
     def store(self, step_data: Dict[str, np.ndarray]) -> None:
         for k in self.buffer_keys:
@@ -350,11 +346,11 @@ class OffPolicyBuffer(BaseBuffer):
             a batch of experience samples: obs, action, reward, next_obs, terminal
         """
         assert batch_size < self.curr_size, f'Batch Size: {batch_size} is larger than the current Buffer Size:{self.curr_size}'
-        env_idxs = np.random.randint(self.num_envs, size=batch_size)
-        step_idxs = np.random.randint(self.curr_size, size=batch_size)
+        env_idx = np.random.randint(self.num_envs, size=batch_size)
+        step_idx = np.random.randint(self.curr_size, size=batch_size)
 
         batch = {
-            key: self.buffers[key][env_idxs, step_idxs]
+            key: self.buffers[key][env_idx, step_idx]
             for key in self.buffer_keys
         }
         if to_torch:
@@ -414,11 +410,6 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
                 self.obs_space,
                 dtype=np.float32,
             ),
-            next_obs=np.zeros(
-                (self.max_size, self.num_agents, self.episode_limit) +
-                self.obs_space,
-                dtype=np.float32,
-            ),
             actions=np.zeros(
                 (self.max_size, self.num_agents, self.episode_limit) +
                 self.action_space,
@@ -445,12 +436,14 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
                 ) + self.done_space,
                 dtype=np.bool_,
             ),
+            available_actions=np.zeros(
+                (self.max_size, self.num_agents, self.episode_limit) +
+                self.action_space,
+                dtype=np.int8,
+            ),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
-                (self.max_size, self.episode_limit) + self.state_space,
-                dtype=np.float32)
-            self.buffers['next_state'] = np.zeros(
                 (self.max_size, self.episode_limit) + self.state_space,
                 dtype=np.float32)
 
@@ -467,12 +460,21 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
     def store_transitions(self, transitions: Dict[str, np.ndarray]):
         self.episode_data.store_transitions(transitions)
 
-    def finish_path(self, env_idx: int, epi_step: int, *terminal_data):
-        next_state, next_obs, filled = terminal_data
-        self.episode_data.episode_buffer['state'][
-            env_idx, epi_step] = next_state[env_idx]
+    def finish_path(self, env_idx: int, epi_step: int, *terminal_data) -> None:
+        """Finish a trajectory path in the buffer.
+
+        Args:
+            env_idx (int): Environment index.
+            epi_step (int): Episode step.
+            terminal_data (Tuple): Terminal data.
+        """
+        next_obs, next_state, available_actions, filled = terminal_data
         self.episode_data.episode_buffer['obs'][env_idx, :,
                                                 epi_step] = next_obs[env_idx]
+        self.episode_data.episode_buffer['state'][
+            env_idx, epi_step] = next_state[env_idx]
+        self.episode_data.episode_buffer['available_actions'][
+            env_idx, :, epi_step] = (available_actions[env_idx])
         self.episode_data.episode_buffer['filled'][env_idx] = filled[env_idx]
 
     def sample(self,
@@ -487,9 +489,9 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
             a batch of experience samples: obs, action, reward, next_obs, terminal
         """
         assert batch_size < self.curr_size, f'Batch Size: {batch_size} is larger than the current Buffer Size:{self.curr_size}'
-        step_idxs = np.random.randint(self.curr_size, size=batch_size)
+        step_idx = np.random.randint(self.curr_size, size=batch_size)
 
-        batch = {key: self.buffers[key][step_idxs] for key in self.buffer_keys}
+        batch = {key: self.buffers[key][step_idx] for key in self.buffer_keys}
         if to_torch:
             batch = self.to_torch(batch)
         return batch
