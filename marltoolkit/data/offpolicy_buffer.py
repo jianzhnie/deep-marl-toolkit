@@ -453,13 +453,14 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
             terminal_data (Tuple): Terminal data.
         """
         next_obs, next_state, available_actions, filled = terminal_data
-        self.episode_data.episode_buffer['obs'][env_idx, :,
-                                                epi_step] = next_obs[env_idx]
+        self.episode_data.episode_buffer['obs'][epi_step,
+                                                env_idx] = next_obs[env_idx]
         self.episode_data.episode_buffer['state'][
-            env_idx, epi_step] = next_state[env_idx]
+            epi_step, env_idx] = next_state[env_idx]
         self.episode_data.episode_buffer['available_actions'][
-            env_idx, :, epi_step] = (available_actions[env_idx])
-        self.episode_data.episode_buffer['filled'][env_idx] = filled[env_idx]
+            epi_step, env_idx] = (available_actions[env_idx])
+        self.episode_data.episode_buffer['filled'][epi_step,
+                                                   env_idx] = filled[env_idx]
 
     def sample(self,
                batch_size: int = 32,
