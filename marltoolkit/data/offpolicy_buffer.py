@@ -447,12 +447,14 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
                 (self.max_size, self.episode_limit) + self.state_space,
                 dtype=np.float32)
 
-    def store_episodes(self):
+    def store_episodes(self,
+                       episode_buffer: Dict[str, np.ndarray] = None) -> None:
+        if episode_buffer is None:
+            episode_buffer = self.episode_data.episode_buffer
         for env_idx in range(self.num_envs):
             for k in self.buffer_keys:
                 self.buffers[k][
-                    self.curr_ptr] = self.episode_data.episode_buffer[k][
-                        env_idx].copy()
+                    self.curr_ptr] = episode_buffer[k][env_idx].copy()
         self.curr_ptr = (self.curr_ptr + 1) % self.max_size
         self.curr_size = min(self.curr_size + 1, self.max_size)
         self.episode_data.reset()
