@@ -21,8 +21,8 @@ class BaseBuffer(ABC):
 
     def __init__(
         self,
+        max_size: int,
         num_envs: int,
-        buffer_size: int,
         num_agents: int,
         obs_space: Union[int, Tuple],
         state_space: Union[int, Tuple],
@@ -35,7 +35,7 @@ class BaseBuffer(ABC):
         """Initialize the base buffer.
 
         :param num_envs: Number of environments.
-        :param buffer_size: Maximum capacity of the buffer.
+        :param max_size: Maximum capacity of the buffer.
         :param num_agents: Number of agents.
         :param state_space: Dimensionality of the state space.
         :param obs_space: Dimensionality of the observation space.
@@ -47,7 +47,7 @@ class BaseBuffer(ABC):
         """
         super().__init__()
         self.num_envs = num_envs
-        self.buffer_size = buffer_size
+        self.max_size = max_size
         self.num_agents = num_agents
         self.obs_space = obs_space
         self.state_space = state_space
@@ -218,14 +218,14 @@ class OffPolicyBuffer(BaseBuffer):
         reward_space: reward space.
         done_space: terminal variable space.
         num_envs: number of parallel environments.
-        buffer_size: buffer size for one environment.
+        max_size: buffer size for one environment.
         **kwargs: other arguments.
     """
 
     def __init__(
         self,
+        max_size: int,
         num_envs: int,
-        buffer_size: int,
         num_agents: int,
         obs_space: Union[int, Tuple],
         state_space: Union[int, Tuple],
@@ -236,8 +236,8 @@ class OffPolicyBuffer(BaseBuffer):
         **kwargs,
     ):
         super().__init__(
+            max_size,
             num_envs,
-            buffer_size,
             num_agents,
             obs_space,
             state_space,
@@ -248,7 +248,7 @@ class OffPolicyBuffer(BaseBuffer):
         )
 
         # Adjust buffer size
-        self.buffer_size = max(buffer_size // num_envs, 1)
+        self.max_size = max(max_size // num_envs, 1)
         if self.state_space is not None:
             self.store_global_state = True
         else:
@@ -281,53 +281,60 @@ class OffPolicyBuffer(BaseBuffer):
 
     def reset(self) -> None:
         self.buffers = dict(
-            obs=np.zeros((
-                self.num_envs,
-                self.buffer_size,
-                self.num_agents,
-            ) + self.obs_space,
-                         dtype=np.float32),
-            next_obs=np.zeros((
-                self.num_envs,
-                self.buffer_size,
-                self.num_agents,
-            ) + self.obs_space,
-                              dtype=np.float32),
-            actions=np.zeros((
-                self.num_envs,
-                self.buffer_size,
-                self.num_agents,
-            ) + self.action_space,
-                             dtype=np.int8),
-            agent_mask=np.zeros((
-                self.num_envs,
-                self.buffer_size,
-                self.num_agents,
+            obs=np.zeros(
+                (
+                    self.num_envs,
+                    self.max_size,
+                    self.num_agents,
+                ) + self.obs_space,
+                dtype=np.float32,
             ),
-                                dtype=bool),
+            next_obs=np.zeros(
+                (
+                    self.num_envs,
+                    self.max_size,
+                    self.num_agents,
+                ) + self.obs_space,
+                dtype=np.float32,
+            ),
+            actions=np.zeros(
+                (
+                    self.num_envs,
+                    self.max_size,
+                    self.num_agents,
+                ) + self.action_space,
+                dtype=np.int8,
+            ),
+            agent_mask=np.zeros(
+                (
+                    self.num_envs,
+                    self.max_size,
+                    self.num_agents,
+                ),
+                dtype=bool,
+            ),
             rewards=np.zeros(
-                (self.num_envs, self.buffer_size) + self.reward_space,
+                (self.num_envs, self.max_size) + self.reward_space,
                 dtype=np.float32),
-            dones=np.zeros((self.num_envs, self.buffer_size) + self.done_space,
-                           dtype=bool),
-            filled=np.zeros(
-                (self.num_envs, self.buffer_size) + self.done_space,
-                dtype=bool),
+            dones=np.zeros((self.num_envs, self.max_size) + self.done_space,
+                           dtype=np.bool_),
+            filled=np.zeros((self.num_envs, self.max_size) + self.done_space,
+                            dtype=np.bool_),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
-                (self.num_envs, self.buffer_size) + self.state_space,
+                (self.num_envs, self.max_size) + self.state_space,
                 dtype=np.float32)
             self.buffers['next_state'] = np.zeros(
-                (self.num_envs, self.buffer_size) + self.state_space,
+                (self.num_envs, self.max_size) + self.state_space,
                 dtype=np.float32)
 
     def store(self, step_data: Dict[str, np.ndarray]) -> None:
         for k in self.buffer_keys:
             assert k in step_data.keys(), f'{k} not in step_data'
             self.buffers[k][:, self.curr_ptr] = step_data[k]
-        self.curr_ptr = (self.curr_ptr + 1) % self.buffer_size
-        self.curr_size = min(self.curr_size + 1, self.buffer_size)
+        self.curr_ptr = (self.curr_ptr + 1) % self.max_size
+        self.curr_size = min(self.curr_size + 1, self.max_size)
 
     def sample_batch(
         self,
@@ -366,14 +373,14 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
         reward_space: reward space.
         done_space: terminal variable space.
         num_envs: number of parallel environments.
-        buffer_size: buffer size for one environment.
+        max_size: buffer size for one environment.
         **kwargs: other arguments.
     """
 
     def __init__(
         self,
+        max_size: int,
         num_envs: int,
-        buffer_size: int,
         num_agents: int,
         episode_limit: int,
         obs_space: Union[int, Tuple],
@@ -386,8 +393,8 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
     ):
         self.episode_limit = episode_limit
         super(OffPolicyBufferRNN, self).__init__(
+            max_size,
             num_envs,
-            buffer_size,
             num_agents,
             obs_space,
             state_space,
@@ -403,45 +410,48 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
     def reset(self):
         self.buffers = dict(
             obs=np.zeros(
-                (self.buffer_size, self.num_agents, self.episode_limit) +
+                (self.max_size, self.num_agents, self.episode_limit) +
                 self.obs_space,
                 dtype=np.float32,
             ),
             next_obs=np.zeros(
-                (self.buffer_size, self.num_agents, self.episode_limit) +
+                (self.max_size, self.num_agents, self.episode_limit) +
                 self.obs_space,
-                dtype=np.float32),
+                dtype=np.float32,
+            ),
             actions=np.zeros(
-                (self.buffer_size, self.num_agents, self.episode_limit) +
+                (self.max_size, self.num_agents, self.episode_limit) +
                 self.action_space,
-                dtype=np.int8),
-            actions_onehot=np.zeros(
-                (self.buffer_size, self.num_agents, self.episode_limit,
-                 self.num_agents) + self.action_space,
                 dtype=np.int8,
             ),
-            rewards=np.zeros((
-                self.buffer_size,
-                self.episode_limit,
-            ) + self.reward_space,
-                             dtype=np.float32),
-            dones=np.zeros((
-                self.buffer_size,
-                self.episode_limit,
-            ) + self.done_space,
-                           dtype=bool),
-            filled=np.zeros((
-                self.buffer_size,
-                self.episode_limit,
-            ) + self.done_space,
-                            dtype=bool),
+            rewards=np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + self.reward_space,
+                dtype=np.float32,
+            ),
+            dones=np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + self.done_space,
+                dtype=np.bool_,
+            ),
+            filled=np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + self.done_space,
+                dtype=np.bool_,
+            ),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
-                (self.buffer_size, self.episode_limit) + self.state_space,
+                (self.max_size, self.episode_limit) + self.state_space,
                 dtype=np.float32)
             self.buffers['next_state'] = np.zeros(
-                (self.buffer_size, self.episode_limit) + self.state_space,
+                (self.max_size, self.episode_limit) + self.state_space,
                 dtype=np.float32)
 
     def store_episodes(self):
@@ -450,8 +460,8 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
                 self.buffers[k][
                     self.curr_ptr] = self.episode_data.episode_buffer[k][
                         env_idx].copy()
-        self.curr_ptr = (self.curr_ptr + 1) % self.buffer_size
-        self.curr_size = min(self.curr_size + 1, self.buffer_size)
+        self.curr_ptr = (self.curr_ptr + 1) % self.max_size
+        self.curr_size = min(self.curr_size + 1, self.max_size)
         self.episode_data.reset()
 
     def store_transitions(self, transitions: Dict[str, np.ndarray]):
