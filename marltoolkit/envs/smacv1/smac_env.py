@@ -38,15 +38,15 @@ class SMACWrapperEnv(object):
         self.state_dim = self.env_info['state_shape']
 
         # Reward and done shapes
-        self.reward_dim = self.num_agents
-        self.done_dim = self.num_agents
+        self.reward_dim = 1
+        self.done_dim = 1
 
         # Observation and state shapes
         self.obs_shape = (self.num_agents, self.obs_dim)
         self.action_shape = (self.num_agents, self.action_dim)
-        self.state_shape = (self.state_dim, 1)
-        self.reward_shape = (self.reward_dim, 1)
-        self.done_shape = (self.done_dim, 1)
+        self.state_shape = (self.state_dim, )
+        self.reward_shape = (self.reward_dim, )
+        self.done_shape = (self.done_dim, )
 
         # Space
         self.obs_space = Box(
@@ -137,12 +137,12 @@ class SMACWrapperEnv(object):
             state_dict[agent_index] = state_one_agent
 
         self._episode_step = 0
-        self._episode_score = 0.0
+        self._episode_score = 0
         info = {
             'episode_step': self._episode_step,
             'episode_score': self._episode_score,
         }
-        return obs, state, info
+        return np.array(obs), np.array(state), info
 
     def step(self, actions: Union[np.ndarray, List[int]]) -> Tuple:
         """Take a step in the environment.
@@ -169,7 +169,14 @@ class SMACWrapperEnv(object):
         info['episode_score'] = self._episode_score
 
         truncated = True if self._episode_step >= self.episode_limit else False
-        return obs, state, reward, terminated, truncated, info
+        return (
+            np.array(obs),
+            np.array(state),
+            np.array(reward),
+            terminated,
+            truncated,
+            info,
+        )
 
     def get_obs_space(self, agent: AgentID) -> gym.spaces.Space:
         """Takes in agent and returns the observation space for that agent.

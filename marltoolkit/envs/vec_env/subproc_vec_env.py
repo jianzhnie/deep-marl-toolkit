@@ -146,8 +146,8 @@ class SubprocVecEnv(BaseVecEnv):
                                              n=self.num_envs,
                                              fn=np.zeros)
 
-        self.buf_rewards = np.zeros((self.num_envs, ), dtype=np.float32)
-        self.buf_dones = np.zeros((self.num_envs, ), dtype=np.bool_)
+        self.buf_rewards = np.zeros((self.num_envs, 1), dtype=np.float32)
+        self.buf_dones = np.zeros((self.num_envs, 1), dtype=np.bool_)
 
         self.parent_pipes, self.processes = [], []
         self.error_queue = ctx.Queue()
