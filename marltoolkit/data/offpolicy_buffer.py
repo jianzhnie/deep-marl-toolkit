@@ -300,10 +300,6 @@ class OffPolicyBuffer(BaseBuffer):
                 (self.max_size, self.num_envs) + self.done_space,
                 dtype=np.bool_,
             ),
-            filled=np.zeros(
-                (self.max_size, self.num_envs) + self.done_space,
-                dtype=np.bool_,
-            ),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
@@ -391,52 +387,50 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
     def reset(self):
         self.buffers = dict(
             obs=np.zeros(
-                (self.max_size, self.episode_limit) + self.obs_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.obs_space,
                 dtype=np.float32,
             ),
             actions=np.zeros(
-                (self.max_size, self.episode_limit) + self.action_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                (self.num_agents, ),
                 dtype=np.int8,
             ),
             rewards=np.zeros(
-                (
-                    self.max_size,
-                    self.episode_limit,
-                ) + self.reward_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.reward_space,
                 dtype=np.float32,
             ),
             dones=np.zeros(
-                (
-                    self.max_size,
-                    self.episode_limit,
-                ) + self.done_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.done_space,
                 dtype=np.bool_,
             ),
             filled=np.zeros(
-                (
-                    self.max_size,
-                    self.episode_limit,
-                ) + self.done_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.done_space,
                 dtype=np.bool_,
             ),
             available_actions=np.zeros(
-                (self.max_size, self.episode_limit) + self.action_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.action_space,
                 dtype=np.int8,
             ),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
-                (self.max_size, self.episode_limit) + self.state_space,
-                dtype=np.float32)
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.state_space,
+                dtype=np.float32,
+            )
 
     def store_episodes(self,
                        episode_buffer: Dict[str, np.ndarray] = None) -> None:
         if episode_buffer is None:
             episode_buffer = self.episode_data.episode_buffer
-        for env_idx in range(self.num_envs):
-            for k in self.buffer_keys:
-                self.buffers[k][
-                    self.curr_ptr] = episode_buffer[k][env_idx].copy()
+        for key in self.buffer_keys:
+            print(key, self.buffers[key].shape, episode_buffer[key].shape)
+            self.buffers[key][self.curr_ptr] = episode_buffer[key].copy()
         self.curr_ptr = (self.curr_ptr + 1) % self.max_size
         self.curr_size = min(self.curr_size + 1, self.max_size)
         self.episode_data.reset()
@@ -454,13 +448,13 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
         """
         next_obs, next_state, available_actions, filled = terminal_data
         self.episode_data.episode_buffer['obs'][epi_step,
-                                                env_idx] = next_obs[env_idx]
+                                                env_idx, :] = next_obs[env_idx]
         self.episode_data.episode_buffer['state'][
-            epi_step, env_idx] = next_state[env_idx]
+            epi_step, env_idx, :] = next_state[env_idx]
         self.episode_data.episode_buffer['available_actions'][
-            epi_step, env_idx] = (available_actions[env_idx])
-        self.episode_data.episode_buffer['filled'][epi_step,
-                                                   env_idx] = filled[epi_step,
+            epi_step, env_idx, :] = (available_actions[env_idx])
+        self.episode_data.episode_buffer['filled'][:,
+                                                   env_idx] = filled[:,
                                                                      env_idx]
 
     def sample(self,
