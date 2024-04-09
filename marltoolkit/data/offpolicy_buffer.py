@@ -11,6 +11,10 @@ try:
 except ImportError:
     psutil = None
 
+__all__ = [
+    'BaseBuffer', 'MaEpisodeData', 'OffPolicyBuffer', 'OffPolicyBufferRNN'
+]
+
 
 class BaseBuffer(ABC):
     """Abstract base class for all buffers.
@@ -86,12 +90,12 @@ class BaseBuffer(ABC):
     @abstractmethod
     def store_episodes(self, **kwargs):
         """Store episodes in the buffer."""
-        return NotImplementedError
+        raise NotImplementedError
 
     @abstractmethod
     def finish_path(self, **kwargs):
         """Finish a trajectory path in the buffer."""
-        return NotImplementedError
+        raise NotImplementedError
 
     def size(self) -> int:
         """Get the current size of the buffer.
