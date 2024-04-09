@@ -1,9 +1,9 @@
 """Utils package."""
 
-from .mlp import MLPActor
-from .rnn import RNNActor
+from .mlp import MLPActorModel
+from .rnn import RNNActorModel
 
 __all__ = [
-    'RNNActor',
-    'MLPActor',
+    'RNNActorModel',
+    'MLPActorModel',
 ]

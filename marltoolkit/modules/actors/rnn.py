@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class RNNActor(nn.Module):
+class RNNActorModel(nn.Module):
 
     def __init__(
         self,
@@ -14,7 +14,7 @@ class RNNActor(nn.Module):
         n_actions: int = None,
         **kwargs,
     ) -> None:
-        super(RNNActor, self).__init__()
+        super(RNNActorModel, self).__init__()
         self.num_rnn_layers = num_rnn_layers
         self.rnn_hidden_dim = rnn_hidden_dim
         self.fc1 = nn.Linear(input_dim, fc_hidden_dim)
