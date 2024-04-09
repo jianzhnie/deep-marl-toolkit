@@ -12,7 +12,7 @@ from smac.env import StarCraft2Env
 from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.qmix_agent import QMixAgent
-from marltoolkit.data import MaReplayBuffer
+from marltoolkit.data import ReplayBuffer
 from marltoolkit.envs.smacv1.env_wrapper import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNActor
 from marltoolkit.modules.mixers import QMixerModel
@@ -75,13 +75,13 @@ def main():
     else:  # wandb
         logger.load(writer)
 
-    rpm = MaReplayBuffer(
-        buffer_size=args.replay_buffer_size,
-        episode_limit=args.episode_limit,
-        state_shape=args.state_shape,
-        obs_shape=args.obs_shape,
+    rpm = ReplayBuffer(
+        max_size=args.replay_buffer_size,
         num_agents=args.num_agents,
         num_actions=args.n_actions,
+        episode_limit=args.episode_limit,
+        obs_shape=args.obs_shape,
+        state_shape=args.state_shape,
         device=args.device,
     )
 
@@ -144,7 +144,7 @@ def main():
             'mean_td_error': mean_td_error,
             'exploration': marl_agent.exploration,
             'learning_rate': marl_agent.learning_rate,
-            'replay_buffer_size': rpm.size(),
+            'replay_max_size': rpm.size(),
             'target_update_count': marl_agent.target_update_count,
         }
         if episode_cnt % args.train_log_interval == 0:
