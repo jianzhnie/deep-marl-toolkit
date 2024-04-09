@@ -10,9 +10,14 @@ import torch.nn.functional as F
 
 
 class QMixerModel(nn.Module):
-    """
-    input: num_agents' agent_qs (a scalar for each agent)
-    output: a scalar (Q)
+    """Implementation of the QMixer network.
+
+    Args:
+        num_agents (int): The number of agents.
+        state_shape (int): The shape of the state.
+        hypernet_layers (int): The number of layers in the hypernetwork.
+        mixing_embed_dim (int): The dimension of the mixing embedding.
+        hypernet_embed_dim (int): The dimension of the hypernetwork embedding.
     """
 
     def __init__(

@@ -44,7 +44,7 @@ class VDNAgent(BaseAgent):
         optim_alpha: float = 0.99,
         optim_eps: float = 0.00001,
         device: str = 'cpu',
-    ):
+    ) -> None:
         check_model_method(actor_model, 'init_hidden', self.__class__.__name__)
         check_model_method(actor_model, 'forward', self.__class__.__name__)
         if mixer_model is not None:

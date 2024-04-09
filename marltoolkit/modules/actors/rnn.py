@@ -4,24 +4,29 @@ import torch.nn.functional as F
 
 
 class RNNActorModel(nn.Module):
+    """Because all the agents share the same network,
+    input_shape=obs_shape+n_actions+n_agents.
+
+    Args:
+        input_dim (int): The input dimension.
+        fc_hidden_dim (int): The hidden dimension of the fully connected layer.
+        rnn_hidden_dim (int): The hidden dimension of the RNN layer.
+        n_actions (int): The number of actions.
+    """
 
     def __init__(
         self,
         input_dim: int = None,
         fc_hidden_dim: int = 64,
-        num_rnn_layers: int = 1,
         rnn_hidden_dim: int = 64,
         n_actions: int = None,
         **kwargs,
     ) -> None:
         super(RNNActorModel, self).__init__()
-        self.num_rnn_layers = num_rnn_layers
         self.rnn_hidden_dim = rnn_hidden_dim
         self.fc1 = nn.Linear(input_dim, fc_hidden_dim)
-        self.rnn = nn.GRUCell(
-            input_size=fc_hidden_dim,
-            hidden_size=rnn_hidden_dim,
-        )
+        self.rnn = nn.GRUCell(input_size=fc_hidden_dim,
+                              hidden_size=rnn_hidden_dim)
         self.fc2 = nn.Linear(rnn_hidden_dim, n_actions)
 
     def init_hidden(self):
@@ -41,9 +46,9 @@ class RNNActorModel(nn.Module):
             h_in = torch.zeros(out.shape[0],
                                self.rnn_hidden_dim).to(inputs.device)
 
-        hidden_states = self.rnn(out, h_in)
-        q_value = self.fc2(hidden_states)  # (batch_size, n_actions)
-        return q_value, hidden_states
+        hidden_state = self.rnn(out, h_in)
+        q_value = self.fc2(hidden_state)  # (batch_size, n_actions)
+        return q_value, hidden_state
 
     def update(self, model: nn.Module) -> None:
         self.load_state_dict(model.state_dict())

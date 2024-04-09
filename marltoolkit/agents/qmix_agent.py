@@ -101,18 +101,24 @@ class QMixAgent(BaseAgent):
             decay_factor=0.5,
         )
 
-    def reset_agent(self, batch_size=1):
-        self._init_hidden_states(batch_size)
+        # 执行过程中，要为每个agent都维护一个 hidden_state
+        # 学习过程中，要为每个agent都维护一个 hidden_state、target_hidden_state
+        self.hidden_state = None
+        self.target_hidden_state = None
 
-    def _init_hidden_states(self, batch_size):
-        self.hidden_states = self.actor_model.init_hidden()
-        if self.hidden_states is not None:
-            self.hidden_states = self.hidden_states.unsqueeze(0).expand(
-                batch_size, self.num_agents, -1)
+    def init_hidden_state(self, batch_size):
+        """Initialize hidden states for each agent.
 
-        self.target_hidden_states = self.target_actor_model.init_hidden()
-        if self.target_hidden_states is not None:
-            self.target_hidden_states = self.target_hidden_states.unsqueeze(
+        Args:
+            batch_size (int): batch size
+        """
+        self.hidden_state = self.actor_model.init_hidden()
+        self.hidden_state = self.hidden_state.unsqueeze(0).expand(
+            batch_size, self.num_agents, -1)
+
+        self.target_hidden_state = self.target_actor_model.init_hidden()
+        if self.target_hidden_state is not None:
+            self.target_hidden_state = self.target_hidden_state.unsqueeze(
                 0).expand(batch_size, self.num_agents, -1)
 
     def sample(self, obs: torch.Tensor, available_actions: torch.Tensor):
@@ -148,8 +154,7 @@ class QMixAgent(BaseAgent):
         available_actions = torch.tensor(available_actions,
                                          dtype=torch.long,
                                          device=self.device)
-        agents_q, self.hidden_states = self.actor_model(
-            obs, self.hidden_states)
+        agents_q, self.hidden_state = self.actor_model(obs, self.hidden_state)
         # mask unavailable actions
         agents_q[available_actions == 0] = -1e10
         actions = agents_q.max(dim=1)[1].detach().cpu().numpy()
@@ -208,21 +213,21 @@ class QMixAgent(BaseAgent):
         # Calculate estimated Q-Values
         local_qs = []
         target_local_qs = []
-        self._init_hidden_states(batch_size)
+        self.init_hidden_state(batch_size)
         for t in range(episode_len):
             obs = obs_batch[:, t, :, :]
             # obs: (batch_size * num_agents, obs_shape)
             obs = obs.reshape(-1, obs_batch.shape[-1])
             # Calculate estimated Q-Values
-            local_q, self.hidden_states = self.actor_model(
-                obs, self.hidden_states)
+            local_q, self.hidden_state = self.actor_model(
+                obs, self.hidden_state)
             #  local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
             local_q = local_q.reshape(batch_size, self.num_agents, -1)
             local_qs.append(local_q)
 
             # Calculate the Q-Values necessary for the target
-            target_local_q, self.target_hidden_states = self.target_actor_model(
-                obs, self.target_hidden_states)
+            target_local_q, self.target_hidden_state = self.target_actor_model(
+                obs, self.target_hidden_state)
             # target_local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
             target_local_q = target_local_q.view(batch_size, self.num_agents,
                                                  -1)

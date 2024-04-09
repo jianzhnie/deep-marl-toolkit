@@ -5,12 +5,11 @@ import numpy as np
 import torch
 from torch.distributions import Categorical
 
+from marltoolkit.agents.base_agent import BaseAgent
 from marltoolkit.modules.actors.rnn import RNNActorModel
 from marltoolkit.modules.critics.coma import MLPCriticModel
 from marltoolkit.utils import (LinearDecayScheduler, MultiStepScheduler,
                                check_model_method, hard_target_update)
-
-from .base_agent import BaseAgent
 
 
 class ComaAgent(BaseAgent):
@@ -65,44 +64,41 @@ class ComaAgent(BaseAgent):
         self.target_update_count = 0
         self.update_target_interval = update_target_interval
         self.update_learner_freq = update_learner_freq
-
         self.device = device
-        self.actor_model = actor_model
-        self.target_actor_model = deepcopy(self.actor_model)
-        self.actor_model.to(device)
-        self.target_actor_model.to(device)
 
-        self.agent_params = list(self.actor_model.parameters())
+        self.actor_model = actor_model.to(device)
+        self.target_actor_model = deepcopy(actor_model).to(device)
 
-        self.critic_model = None
-        if critic_model is not None:
-            self.critic_model = critic_model
-            self.target_critic_model = deepcopy(self.critic_model)
-            self.critic_model.to(device)
-            self.target_critic_model.to(device)
-            self.critic_params = list(self.critic_model.parameters())
+        self.critic_model = critic_model.to(device)
+        self.target_critic_model = deepcopy(critic_model).to(device)
 
-        self.actor_optimizer = torch.optim.RMSprop(params=self.agent_params,
-                                                   lr=self.actor_lr,
-                                                   alpha=optim_alpha,
-                                                   eps=optim_eps)
+        self.actor_params = list(self.actor_model.parameters())
+        self.critic_params = list(self.critic_model.parameters())
 
-        self.critic_optimizer = torch.optim.RMSprop(params=self.agent_params,
-                                                    lr=self.critic_lr,
-                                                    alpha=optim_alpha,
-                                                    eps=optim_eps)
+        self.actor_optimizer = torch.optim.RMSprop(
+            params=self.actor_params,
+            lr=self.actor_lr,
+            alpha=optim_alpha,
+            eps=optim_eps,
+        )
+
+        self.critic_optimizer = torch.optim.RMSprop(
+            params=self.actor_params,
+            lr=self.critic_lr,
+            alpha=optim_alpha,
+            eps=optim_eps,
+        )
 
         self.ep_scheduler = LinearDecayScheduler(exploration_start,
                                                  total_steps * 0.8)
 
         lr_steps = [total_steps * 0.5, total_steps * 0.8]
-        self.lr_scheduler = MultiStepScheduler(start_value=self.actor_lr,
-                                               max_steps=total_steps,
-                                               milestones=lr_steps,
-                                               decay_factor=0.5)
-
-    def reset_agent(self, batch_size=1) -> None:
-        self.init_hidden_states(batch_size)
+        self.lr_scheduler = MultiStepScheduler(
+            start_value=self.actor_lr,
+            max_steps=total_steps,
+            milestones=lr_steps,
+            decay_factor=0.5,
+        )
 
     def init_hidden_states(self, batch_size: int) -> None:
         """Init a hidden tensor for every agent.
@@ -129,6 +125,7 @@ class ComaAgent(BaseAgent):
         self,
         obs: np.array,
         available_actions: np.array,
+        hidden_state: np.array = None,
     ):
         """sample actions via epsilon-greedy
         Args:
@@ -145,7 +142,8 @@ class ComaAgent(BaseAgent):
             actions = actions_dist.sample().long().cpu().detach().numpy()
 
         else:
-            actions = self.predict(obs, available_actions)
+            actions, hidden_state = self.predict(obs, available_actions,
+                                                 hidden_state)
 
         # update exploration
         self.exploration = max(self.ep_scheduler.step(), self.min_exploration)
@@ -163,11 +161,12 @@ class ComaAgent(BaseAgent):
         available_actions = torch.tensor(available_actions,
                                          dtype=torch.long,
                                          device=self.device)
-        agents_q, hidden_state = self.actor_model(obs, hidden_state)
-        # mask unavailable actions
-        agents_q[available_actions == 0] = -1e10
-        actions = agents_q.max(dim=1)[1].detach().cpu().numpy()
-        return actions
+        with torch.no_grad():
+            policy_logits, hidden_state = self.actor_model(obs, hidden_state)
+            # mask unavailable actions
+            policy_logits[available_actions == 0] = -1e10
+            actions = policy_logits.max(dim=1)[1].detach().cpu().numpy()
+        return (actions, hidden_state)
 
     def update_target(self):
         hard_target_update(self.actor_model, self.target_actor_model)
@@ -290,7 +289,7 @@ class ComaAgent(BaseAgent):
         self.actor_optimizer.zero_grad()
         loss.backward()
         if self.clip_grad_norm:
-            torch.nn.utils.clip_grad_norm_(self.agent_params,
+            torch.nn.utils.clip_grad_norm_(self.actor_params,
                                            self.clip_grad_norm)
         self.actor_optimizer.step()
 

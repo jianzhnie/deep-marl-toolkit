@@ -62,7 +62,7 @@ class MultiAgentEnv(gym.Env):
     def get_available_actions(self):
         raise NotImplementedError
 
-    def _get_actions_one_hot(self):
+    def get_actions_one_hot(self):
         raise NotImplementedError
 
     def get_total_actions(self):

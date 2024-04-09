@@ -14,7 +14,7 @@ def run_train_episode(
     args: argparse.Namespace = None,
 ):
     episode_limit = args.episode_limit
-    agent.reset_agent()
+    agent.init_hidden_states()
     episode_reward = 0.0
     episode_step = 0
     terminated = False
@@ -30,7 +30,7 @@ def run_train_episode(
     while not terminated:
         available_actions = env.get_available_actions()
         actions = agent.sample(obs, available_actions)
-        actions_onehot = env.get_actions_one_hot(actions)
+        actions_onehot = env._get_actions_one_hot(actions)
         next_obs, next_state, reward, terminated, info = env.step(actions)
         episode_reward += reward
         episode_step += 1
