@@ -6,20 +6,20 @@ class BaseAgent(ABC):
     def __init__(self):
         pass
 
-    def reset_agent(self):
+    def reset_agent(self, **kwargs):
         raise NotImplementedError
 
-    def sample(self):
+    def sample(self, **kwargs):
         raise NotImplementedError
 
-    def predict(self):
+    def predict(self, **kwargs):
         raise NotImplementedError
 
-    def learn(self):
+    def learn(self, **kwargs):
         raise NotImplementedError
 
-    def save_model(self):
+    def save_model(self, **kwargs):
         raise NotImplementedError
 
-    def load_model(self):
+    def load_model(self, **kwargs):
         raise NotImplementedError

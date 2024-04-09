@@ -10,12 +10,12 @@ sys.path.append('../')
 from smac.env import StarCraft2Env
 
 from configs.arguments import get_common_args
-from configs.qmix_config import QMixConfig
-from marltoolkit.agents.qmix_agent import QMixAgent
+from configs.coma_config import ComaConfig
+from marltoolkit.agents.coma_agent import ComaAgent
 from marltoolkit.data import ReplayBuffer
 from marltoolkit.envs.smacv1.env_wrapper import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNActorModel
-from marltoolkit.modules.mixers import QMixerModel
+from marltoolkit.modules.critics.coma import MLPCriticModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
                                                 run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
@@ -31,11 +31,11 @@ def main():
     Returns:
         None
     """
-    qmix_config = QMixConfig()
+    coma_config = ComaConfig()
     common_args = get_common_args()
-    args = argparse.Namespace(**vars(common_args), **vars(qmix_config))
-    device = torch.device('cuda') if torch.cuda.is_available(
-    ) and args.cuda else torch.device('cpu')
+    args = argparse.Namespace(**vars(common_args), **vars(coma_config))
+    device = (torch.device('cuda') if torch.cuda.is_available() and args.cuda
+              else torch.device('cpu'))
 
     env = StarCraft2Env(map_name=args.scenario, difficulty=args.difficulty)
     env = SC2EnvWrapper(env)
@@ -91,17 +91,12 @@ def main():
         n_actions=args.n_actions,
     )
 
-    mixer_model = QMixerModel(
-        num_agents=args.num_agents,
-        state_shape=args.state_shape,
-        mixing_embed_dim=args.mixing_embed_dim,
-        hypernet_layers=args.hypernet_layers,
-        hypernet_embed_dim=args.hypernet_embed_dim,
-    )
-
-    marl_agent = QMixAgent(
+    critic_model = MLPCriticModel(input_dim=args.obs_shape,
+                                  hidden_dim=args.hidden_dim,
+                                  output_dim=1)
+    marl_agent = ComaAgent(
         actor_model=actor_model,
-        mixer_model=mixer_model,
+        critic_model=critic_model,
         num_agents=args.num_agents,
         double_q=args.double_q,
         total_steps=args.total_steps,
@@ -125,8 +120,8 @@ def main():
     episode_cnt = 0
     progress_bar = ProgressBar(args.total_steps)
     while steps_cnt < args.total_steps:
-        episode_reward, episode_step, is_win, mean_loss, mean_td_error = run_train_episode(
-            env, marl_agent, rpm, args)
+        episode_reward, episode_step, is_win, mean_loss, mean_td_error = (
+            run_train_episode(env, marl_agent, rpm, args))
         # update episodes and steps
         episode_cnt += 1
         steps_cnt += episode_step
@@ -163,7 +158,7 @@ def main():
             test_results = {
                 'env_step': eval_steps,
                 'rewards': eval_rewards,
-                'win_rate': eval_win_rate
+                'win_rate': eval_win_rate,
             }
             logger.log_test_data(test_results, steps_cnt)
 

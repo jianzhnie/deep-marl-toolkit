@@ -78,7 +78,7 @@ def main():
                          batch_size=config['batch_size'],
                          device=device)
 
-    agent_model = RNNModel(
+    actor_model = RNNModel(
         input_shape=config['obs_shape'],
         rnn_hidden_dim=config['rnn_hidden_dim'],
         n_actions=config['n_actions'],
@@ -90,7 +90,7 @@ def main():
                               mixing_embed_dim=config['mixing_embed_dim'])
 
     qmix_agent = QTranAgent(
-        agent_model=agent_model,
+        actor_model=actor_model,
         mixer_model=mixer_model,
         n_agents=config['n_agents'],
         n_actions=config['n_actions'],
@@ -106,7 +106,8 @@ def main():
         clip_grad_norm=config['clip_grad_norm'],
         opt_loss_coef=config['opt_loss_coef'],
         nopt_min_loss_coef=config['nopt_min_loss_coef'],
-        device=device)
+        device=device,
+    )
 
     progress_bar = ProgressBar(config['memory_warmup_size'])
     while rpm.size() < config['memory_warmup_size']:

@@ -20,8 +20,10 @@ class ComaAgent(BaseAgent):
         critic_model (nn.Model): A mixing network which takes local q values as input
             to construct a global Q network.
         double_q (bool): Double-DQN.
+        td_lambda (float): lambda of td-lambda return
         gamma (float): discounted factor for reward computation.
-        lr (float): learning rate.
+        actor_lr (float): actor network learning rate
+        critic_lr (float): critic network learning rate
         clip_grad_norm (None, or float): clipped value of gradients' global norm.
     """
 
@@ -100,9 +102,9 @@ class ComaAgent(BaseAgent):
                                                decay_factor=0.5)
 
     def reset_agent(self, batch_size=1) -> None:
-        self._init_hidden_states(batch_size)
+        self.init_hidden_states(batch_size)
 
-    def _init_hidden_states(self, batch_size: int) -> None:
+    def init_hidden_states(self, batch_size: int) -> None:
         """Init a hidden tensor for every agent.
 
         Args:
@@ -111,15 +113,17 @@ class ComaAgent(BaseAgent):
         assert hasattr(
             self.actor_model, 'init_hidden'
         ), "actor must have rnn structure and has method 'init_hidden' to make hidden states"
-        self.hidden_states = self.actor_model.init_hidden()
-        if self.hidden_states is not None:
-            self.hidden_states = self.hidden_states.unsqueeze(0).expand(
-                batch_size, self.num_agents, -1)
+        hidden = self.actor_model.init_hidden()
 
-        self.target_hidden_states = self.target_actor_model.init_hidden()
-        if self.target_hidden_states is not None:
-            self.target_hidden_states = self.target_hidden_states.unsqueeze(
-                0).expand(batch_size, self.num_agents, -1)
+        if hidden is not None:
+            hidden = hidden.unsqueeze(0).expand(batch_size, self.num_agents,
+                                                -1)
+
+        tgt_hidden = self.target_actor_model.init_hidden()
+        if tgt_hidden is not None:
+            tgt_hidden = tgt_hidden.unsqueeze(0).expand(
+                batch_size, self.num_agents, -1)
+        return hidden, tgt_hidden
 
     def sample(
         self,
@@ -147,7 +151,7 @@ class ComaAgent(BaseAgent):
         self.exploration = max(self.ep_scheduler.step(), self.min_exploration)
         return actions
 
-    def predict(self, obs, available_actions):
+    def predict(self, obs, available_actions, hidden_state=None):
         """take greedy actions
         Args:
             obs (np.ndarray):               (num_agents, obs_shape)
@@ -159,8 +163,7 @@ class ComaAgent(BaseAgent):
         available_actions = torch.tensor(available_actions,
                                          dtype=torch.long,
                                          device=self.device)
-        agents_q, self.hidden_states = self.actor_model(
-            obs, self.hidden_states)
+        agents_q, hidden_state = self.actor_model(obs, hidden_state)
         # mask unavailable actions
         agents_q[available_actions == 0] = -1e10
         actions = agents_q.max(dim=1)[1].detach().cpu().numpy()
@@ -210,21 +213,20 @@ class ComaAgent(BaseAgent):
         # Calculate estimated Q-Values
         local_qs = []
         target_local_qs = []
-        self._init_hidden_states(batch_size)
+        hidden_state, tgt_hidden_state = self.init_hidden_states(batch_size)
         for t in range(episode_len):
             obs = obs_batch[:, t, :, :]
             # obs: (batch_size * num_agents, obs_shape)
             obs = obs.reshape(-1, obs_batch.shape[-1])
             # Calculate estimated Q-Values
-            local_q, self.hidden_states = self.actor_model(
-                obs, self.hidden_states)
+            local_q, hidden_state = self.actor_model(obs, hidden_state)
             #  local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
             local_q = local_q.reshape(batch_size, self.num_agents, -1)
             local_qs.append(local_q)
 
             # Calculate the Q-Values necessary for the target
-            target_local_q, self.target_hidden_states = self.target_actor_model(
-                obs, self.target_hidden_states)
+            target_local_q, tgt_hidden_state = self.target_actor_model(
+                obs, tgt_hidden_state)
             # target_local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
             target_local_q = target_local_q.view(batch_size, self.num_agents,
                                                  -1)

@@ -16,7 +16,7 @@ from configs.idqn_config import IDQNConfig
 from marltoolkit.agents import IDQNAgent
 from marltoolkit.data import ReplayBuffer
 from marltoolkit.envs.smacv1.env_wrapper import SC2EnvWrapper
-from marltoolkit.modules.actors import RNNActor
+from marltoolkit.modules.actors import RNNActorModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
                                                 run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
@@ -84,14 +84,14 @@ def main():
         state_shape=args.state_shape,
         device=args.device,
     )
-    agent_model = RNNActor(
+    actor_model = RNNActorModel(
         input_dim=args.obs_shape,
         rnn_hidden_dim=args.rnn_hidden_dim,
         n_actions=args.n_actions,
     )
 
     marl_agent = IDQNAgent(
-        agent_model=agent_model,
+        actor_model=actor_model,
         mixer_model=None,
         num_agents=args.num_agents,
         double_q=args.double_q,
