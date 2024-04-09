@@ -66,15 +66,15 @@ class SC2EnvWrapper(object):
                              axis=-1)
         # obs shape: (self.n_agents, (obs_dim + self.n_actions + self.n_agents ))
         state = np.array(self.env.get_state())
-        return state, obs
+        return (obs, state)
 
     def step(self, actions):
-        reward, terminated, _ = self.env.step(actions)
+        reward, terminated, info = self.env.step(actions)
 
-        next_state = np.array(self.env.get_state())
+        state = np.array(self.env.get_state())
         last_actions_one_hot = self._get_actions_one_hot(actions)
-        next_obs = np.array(self.env.get_obs())
+        obs = np.array(self.env.get_obs())
         # obs shape: (self.n_agents, (obs_dim + self.n_actions + self.n_agents ))
-        next_obs = np.concatenate(
-            [next_obs, last_actions_one_hot, self.agents_id_one_hot], axis=-1)
-        return next_state, next_obs, reward, terminated
+        obs = np.concatenate(
+            [obs, last_actions_one_hot, self.agents_id_one_hot], axis=-1)
+        return obs, state, reward, terminated, info

@@ -18,8 +18,8 @@ def run_train_episode(
     episode_reward = 0.0
     episode_step = 0
     terminated = False
-    state, obs = env.reset()
-    episode_experience = EpisodeData(
+    (obs, state) = env.reset()
+    episode_transition = EpisodeData(
         num_agents=args.num_agents,
         num_actions=args.n_actions,
         episode_limit=episode_limit,
@@ -31,10 +31,10 @@ def run_train_episode(
         available_actions = env.get_available_actions()
         actions = agent.sample(obs, available_actions)
         actions_onehot = env._get_actions_one_hot(actions)
-        next_state, next_obs, reward, terminated = env.step(actions)
+        next_obs, next_state, reward, terminated, info = env.step(actions)
         episode_reward += reward
         episode_step += 1
-        episode_experience.add(
+        episode_transition.store(
             obs,
             state,
             actions,
@@ -49,18 +49,20 @@ def run_train_episode(
 
     # fill the episode
     for _ in range(episode_step, episode_limit):
-        episode_experience.fill_mask()
+        episode_transition.fill_mask()
 
-    episode_data = episode_experience.get_data()
+    # get the whole episode data
+    episode_data = episode_transition.get_episodes_data()
 
-    rpm.store(**episode_data)
+    # ReplayBuffer store the episode data
+    rpm.store_episodes(**episode_data)
     is_win = env.win_counted
 
     mean_loss = []
     mean_td_error = []
     if rpm.size() > args.memory_warmup_size:
         for _ in range(args.update_learner_freq):
-            batch = rpm.sample_batch(args.batch_size)
+            batch = rpm.sample(args.batch_size)
             loss, td_error = agent.learn(**batch)
             mean_loss.append(loss)
             mean_td_error.append(td_error)
@@ -84,11 +86,11 @@ def run_evaluate_episode(
         episode_reward = 0.0
         episode_step = 0
         terminated = False
-        state, obs = env.reset()
+        obs, state = env.reset()
         while not terminated:
             available_actions = env.get_available_actions()
             actions = agent.predict(obs, available_actions)
-            state, obs, reward, terminated = env.step(actions)
+            obs, state, reward, terminated, info = env.step(actions)
             episode_step += 1
             episode_reward += reward
 

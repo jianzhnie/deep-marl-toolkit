@@ -42,7 +42,7 @@ class EpisodeData:
         self.curr_size = 0
         self.episode_limit = episode_limit
 
-    def add(
+    def store(
         self,
         obs: np.ndarray,
         state: np.ndarray,
@@ -86,7 +86,7 @@ class EpisodeData:
         self.curr_ptr += 1
         self.curr_size = min(self.curr_size + 1, self.episode_limit)
 
-    def get_data(self) -> Dict[str, np.ndarray]:
+    def get_episodes_data(self) -> Dict[str, np.ndarray]:
         """Get all the data in an episode.
 
         Returns:
@@ -133,7 +133,6 @@ class ReplayBuffer:
         episode_limit: int,
         obs_shape: Union[int, Tuple],
         state_shape: Union[int, Tuple],
-        dtype: torch.dtype = torch.float32,
         device: str = 'cpu',
     ) -> None:
         """Initialize MaReplayBuffer.
@@ -145,20 +144,23 @@ class ReplayBuffer:
         - episode_limit (int): Maximum number of steps in an episode.
         - obs_shape (Union[int, Tuple]): Shape of the observation.
         - state_shape (Union[int, Tuple]): Shape of the state.
-        - dtype (torch.dtype): Data type for PyTorch tensors.
         - device (str): Device for PyTorch tensors ('cpu' or 'cuda').
         """
         self.obs_buf = np.zeros(
-            (max_size, episode_limit, num_agents, obs_shape))
-        self.state_buf = np.zeros((max_size, episode_limit, state_shape))
-        self.action_buf = np.zeros((max_size, episode_limit, num_agents))
+            (max_size, episode_limit, num_agents, obs_shape), dtype=np.float32)
+        self.state_buf = np.zeros((max_size, episode_limit, state_shape),
+                                  dtype=np.float32)
+        self.action_buf = np.zeros((max_size, episode_limit, num_agents),
+                                   dtype=np.int64)
         self.action_onehot_buf = np.zeros(
-            (max_size, episode_limit, num_agents, num_actions))
+            (max_size, episode_limit, num_agents, num_actions), dtype=np.bool_)
         self.available_action_buf = np.zeros(
-            (max_size, episode_limit, num_agents, num_actions))
-        self.reward_buf = np.zeros((max_size, episode_limit, 1))
-        self.terminal_buf = np.zeros((max_size, episode_limit, 1))
-        self.filled_buf = np.zeros((max_size, episode_limit, 1))
+            (max_size, episode_limit, num_agents, num_actions), dtype=np.bool_)
+        self.reward_buf = np.zeros((max_size, episode_limit, 1),
+                                   dtype=np.float32)
+        self.terminal_buf = np.zeros((max_size, episode_limit, 1),
+                                     dtype=np.int8)
+        self.filled_buf = np.zeros((max_size, episode_limit, 1), dtype=np.int8)
 
         self.state_shape = state_shape
         self.obs_shape = obs_shape
@@ -167,14 +169,13 @@ class ReplayBuffer:
 
         self.max_size = max_size
         self.episode_limit = episode_limit
-        self.dtype = dtype
         self.device = device
 
         # memory management
         self.curr_ptr = 0
         self.curr_size = 0
 
-    def store(
+    def store_episodes(
         self,
         obs: np.ndarray,
         state: np.ndarray,
@@ -221,12 +222,12 @@ class ReplayBuffer:
         - torch.Tensor: PyTorch tensor.
         """
         if copy:
-            return torch.tensor(array, dtype=self.dtype, device=self.device)
-        return torch.as_tensor(array, dtype=self.dtype, device=self.device)
+            return torch.tensor(array, device=self.device)
+        return torch.as_tensor(array, device=self.device)
 
-    def sample_batch(self,
-                     batch_size: int,
-                     to_torch: bool = True) -> Dict[str, torch.Tensor]:
+    def sample(self,
+               batch_size: int,
+               to_torch: bool = True) -> Dict[str, torch.Tensor]:
         """Sample a batch from the replay buffer.
 
         Parameters:
@@ -247,7 +248,6 @@ class ReplayBuffer:
             terminated_batch=self.terminal_buf[idx],
             filled_batch=self.filled_buf[idx],
         )
-
         if to_torch:
             for key, val in batch.items():
                 batch[key] = self.to_torch(val)
