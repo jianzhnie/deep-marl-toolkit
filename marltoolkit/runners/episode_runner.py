@@ -3,14 +3,14 @@ import argparse
 import numpy as np
 
 from marltoolkit.agents import BaseAgent
-from marltoolkit.data import EpisodeData, MaReplayBuffer
+from marltoolkit.data.ma_buffer import EpisodeData, ReplayBuffer
 from marltoolkit.envs import MultiAgentEnv
 
 
 def run_train_episode(
     env: MultiAgentEnv,
     agent: BaseAgent,
-    rpm: MaReplayBuffer,
+    rpm: ReplayBuffer,
     args: argparse.Namespace = None,
 ):
     episode_limit = args.episode_limit
@@ -20,11 +20,11 @@ def run_train_episode(
     terminated = False
     state, obs = env.reset()
     episode_experience = EpisodeData(
-        episode_limit=episode_limit,
-        state_shape=args.state_shape,
-        obs_shape=args.obs_shape,
-        num_actions=args.n_actions,
         num_agents=args.num_agents,
+        num_actions=args.n_actions,
+        episode_limit=episode_limit,
+        obs_shape=args.obs_shape,
+        state_shape=args.state_shape,
     )
 
     while not terminated:
@@ -35,14 +35,14 @@ def run_train_episode(
         episode_reward += reward
         episode_step += 1
         episode_experience.add(
-            state,
             obs,
+            state,
             actions,
             actions_onehot,
             available_actions,
             reward,
             terminated,
-            0,
+            filled=0,
         )
         state = next_state
         obs = next_obs
