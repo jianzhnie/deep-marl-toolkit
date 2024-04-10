@@ -41,7 +41,10 @@ class MaEpisodeData(object):
             self.store_global_state = True
         else:
             self.store_global_state = False
-        self.episode_buffer = {}
+
+        # memory management
+        self.curr_ptr = 0
+        self.curr_size = 0
         self.reset()
         self.episode_keys = self.episode_buffer.keys()
 
@@ -92,6 +95,9 @@ class MaEpisodeData(object):
             self.curr_ptr] = transitions['available_actions']
         if self.store_global_state:
             self.episode_buffer['state'][self.curr_ptr] = transitions['state']
+
+        self.curr_ptr = (self.curr_ptr + 1) % self.episode_limit
+        self.curr_size = min(self.curr_size + 1, self.episode_limit)
 
     def size(self) -> int:
         """get current size of replay memory."""
