@@ -6,9 +6,6 @@ class BaseAgent(ABC):
     def __init__(self):
         pass
 
-    def reset_agent(self, **kwargs):
-        raise NotImplementedError
-
     def init_hidden_states(self, **kwargs):
         raise NotImplementedError
 

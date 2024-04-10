@@ -93,10 +93,7 @@ class QattenAgent(object):
                                                milestones=lr_steps,
                                                decay_factor=0.5)
 
-    def reset_agent(self, batch_size=1):
-        self._init_hidden_states(batch_size)
-
-    def _init_hidden_states(self, batch_size):
+    def init_hidden_states(self, batch_size: int = 1) -> None:
         self.hidden_states = self.actor_model.init_hidden()
         if self.hidden_states is not None:
             self.hidden_states = self.hidden_states.unsqueeze(0).expand(
@@ -193,7 +190,7 @@ class QattenAgent(object):
         # Calculate estimated Q-Values
         local_qs = []
         target_local_qs = []
-        self._init_hidden_states(batch_size)
+        self.init_hidden_states(batch_size)
         for t in range(episode_len):
             obs = obs_batch[:, t, :, :]
             # obs: (batch_size * n_agents, obs_shape)

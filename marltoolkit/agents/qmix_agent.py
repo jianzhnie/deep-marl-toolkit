@@ -106,7 +106,7 @@ class QMixAgent(BaseAgent):
         self.hidden_state = None
         self.target_hidden_state = None
 
-    def init_hidden_state(self, batch_size):
+    def init_hidden_states(self, batch_size: int = 1) -> None:
         """Initialize hidden states for each agent.
 
         Args:
@@ -213,7 +213,7 @@ class QMixAgent(BaseAgent):
         # Calculate estimated Q-Values
         local_qs = []
         target_local_qs = []
-        self.init_hidden_state(batch_size)
+        self.init_hidden_states(batch_size)
         for t in range(episode_len):
             obs = obs_batch[:, t, :, :]
             # obs: (batch_size * num_agents, obs_shape)
