@@ -27,7 +27,7 @@ class MaEpisodeData(object):
         reward_space: Union[int, Tuple],
         done_space: Union[int, Tuple],
         **kwargs,
-    ):
+    ) -> None:
         self.num_envs = num_envs
         self.num_agents = num_agents
         self.episode_limit = episode_limit

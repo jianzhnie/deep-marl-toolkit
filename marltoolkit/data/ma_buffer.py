@@ -12,45 +12,98 @@ class EpisodeData:
     def __init__(
         self,
         num_agents: int,
-        num_actions: int,
         episode_limit: int,
-        obs_shape: Union[int, Tuple],
-        state_shape: Union[int, Tuple],
-    ):
+        obs_space: Union[int, Tuple],
+        state_space: Union[int, Tuple],
+        action_space: Union[int, Tuple],
+        reward_space: Union[int, Tuple],
+        done_space: Union[int, Tuple],
+        **kwargs,
+    ) -> None:
         """Initialize EpisodeData.
 
         Parameters:
         - num_agents (int): Number of agents.
         - num_actions (int): Number of possible actions.
         - episode_limit (int): Maximum number of steps in an episode.
-        - obs_shape (Union[int, Tuple]): Shape of the observation.
-        - state_shape (Union[int, Tuple]): Shape of the state.
+        - obs_space (Union[int, Tuple]): Shape of the observation.
+        - state_space (Union[int, Tuple]): Shape of the state.
         """
-        self.obs_buf = np.zeros((episode_limit, num_agents, obs_shape))
-        self.state_buf = np.zeros((episode_limit, state_shape))
-        self.action_buf = np.zeros((episode_limit, num_agents))
-        self.action_onehot_buf = np.zeros(
-            (episode_limit, num_agents, num_actions))
-        self.available_action_buf = np.zeros(
-            (episode_limit, num_agents, num_actions))
-        self.reward_buf = np.zeros((episode_limit, 1))
-        self.terminal_buf = np.zeros((episode_limit, 1))
-        self.filled_buf = np.zeros((episode_limit, 1))
+        self.num_agents = num_agents
+        self.episode_limit = episode_limit
+        self.obs_space = obs_space
+        self.state_space = state_space
+        self.action_space = action_space
+        self.reward_space = reward_space
+        self.done_space = done_space
+
+        if self.state_space is not None:
+            self.store_global_state = True
+        else:
+            self.store_global_state = False
+        self.episode_buffer = {}
+        self.reset()
+        self.episode_keys = self.episode_buffer.keys()
+
+    def reset(self):
+        self.episode_buffer = dict(
+            obs=np.zeros(
+                (
+                    self.episode_limit,
+                    self.num_agents,
+                ) + self.obs_space,
+                dtype=np.float32,
+            ),
+            actions=np.zeros(
+                (self.episode_limit, ) + (self.num_agents, ),
+                dtype=np.int8,
+            ),
+            last_actions=np.zeros(
+                (
+                    self.episode_limit,
+                    self.num_agents,
+                ) + (self.num_agents, ),
+                dtype=np.int8,
+            ),
+            available_actions=np.zeros(
+                (
+                    self.episode_limit,
+                    self.num_agents,
+                ) + self.action_space,
+                dtype=np.int8,
+            ),
+            rewards=np.zeros(
+                (self.episode_limit, ) + self.reward_space,
+                dtype=np.float32,
+            ),
+            dones=np.zeros(
+                (self.episode_limit, ) + self.done_space,
+                dtype=np.bool_,
+            ),
+            filled=np.zeros(
+                (self.episode_limit, ) + self.done_space,
+                dtype=np.float32,
+            ),
+        )
+        if self.store_global_state:
+            self.episode_buffer['state'] = np.zeros(
+                (self.episode_limit, ) + self.state_space,
+                dtype=np.float32,
+            )
 
         # memory management
         self.curr_ptr = 0
         self.curr_size = 0
-        self.episode_limit = episode_limit
 
-    def store(
+    def store_transitions(
         self,
         obs: np.ndarray,
         state: np.ndarray,
         actions: np.ndarray,
-        actions_onehot: np.ndarray,
+        last_actions: np.ndarray,
         available_actions: np.ndarray,
         rewards: np.ndarray,
-        terminated: np.ndarray,
+        done: np.ndarray,
         filled: np.ndarray,
     ) -> None:
         """Add a step of data to the episode.
@@ -59,30 +112,32 @@ class EpisodeData:
         - obs (np.ndarray): Observation data.
         - state (np.ndarray): State data.
         - actions (np.ndarray): Actions taken.
-        - actions_onehot (np.ndarray): Actions in one-hot encoding.
+        - last_actions (np.ndarray): Actions in one-hot encoding.
         - available_actions (np.ndarray): Available actions for each agent.
         - rewards (np.ndarray): Reward received.
-        - terminated (np.ndarray): Termination flag.
+        - done (np.ndarray): Termination flag.
         - filled (np.ndarray): Filled flag.
         """
         assert self.size() < self.episode_limit
-        self.obs_buf[self.curr_ptr] = obs
-        self.state_buf[self.curr_ptr] = state
-        self.action_buf[self.curr_ptr] = actions
-        self.action_onehot_buf[self.curr_ptr] = actions_onehot
-        self.available_action_buf[self.curr_ptr] = available_actions
+        self.episode_buffer['obs'][self.curr_ptr] = obs
+        self.episode_buffer['actions'][self.curr_ptr] = actions
+        self.episode_buffer['last_actions'][self.curr_ptr] = last_actions
+        self.episode_buffer['available_actions'][
+            self.curr_ptr] = available_actions
+        self.episode_buffer['rewards'][self.curr_ptr] = rewards
+        self.episode_buffer['dones'][self.curr_ptr] = done
+        self.episode_buffer['filled'][self.curr_ptr] = filled
+        if self.store_global_state:
+            self.episode_buffer['state'][self.curr_ptr] = state
 
-        self.reward_buf[self.curr_ptr] = rewards
-        self.terminal_buf[self.curr_ptr] = terminated
-        self.filled_buf[self.curr_ptr] = filled
         self.curr_ptr += 1
         self.curr_size = min(self.curr_size + 1, self.episode_limit)
 
     def fill_mask(self) -> None:
         """Fill the mask for the current step."""
         assert self.size() < self.episode_limit
-        self.terminal_buf[self.curr_ptr] = True
-        self.filled_buf[self.curr_ptr] = 1.0
+        self.episode_buffer['filled'][self.curr_ptr] = 1.0
+        self.episode_buffer['done'][self.curr_ptr] = True
         self.curr_ptr += 1
         self.curr_size = min(self.curr_size + 1, self.episode_limit)
 
@@ -93,17 +148,7 @@ class EpisodeData:
         - Dict[str, np.ndarray]: Episode data dictionary.
         """
         assert self.size() == self.episode_limit
-        episode_data = dict(
-            obs=self.obs_buf,
-            state=self.state_buf,
-            actions=self.action_buf,
-            actions_onehot=self.action_onehot_buf,
-            available_actions=self.available_action_buf,
-            rewards=self.reward_buf,
-            terminated=self.terminal_buf,
-            filled=self.filled_buf,
-        )
-        return episode_data
+        return self.episode_buffer
 
     def size(self) -> int:
         """Get current size of replay memory.
@@ -129,11 +174,13 @@ class ReplayBuffer:
         self,
         max_size: int,
         num_agents: int,
-        num_actions: int,
         episode_limit: int,
-        obs_shape: Union[int, Tuple],
-        state_shape: Union[int, Tuple],
-        device: str = 'cpu',
+        obs_space: Union[int, Tuple],
+        state_space: Union[int, Tuple],
+        action_space: Union[int, Tuple],
+        reward_space: Union[int, Tuple],
+        done_space: Union[int, Tuple],
+        device: Union[torch.device, str] = 'cpu',
     ) -> None:
         """Initialize MaReplayBuffer.
 
@@ -142,34 +189,89 @@ class ReplayBuffer:
         - num_agents (int): Number of agents.
         - num_actions (int): Number of possible actions.
         - episode_limit (int): Maximum number of steps in an episode.
-        - obs_shape (Union[int, Tuple]): Shape of the observation.
-        - state_shape (Union[int, Tuple]): Shape of the state.
+        - obs_space (Union[int, Tuple]): Shape of the observation.
+        - state_space (Union[int, Tuple]): Shape of the state.
         - device (str): Device for PyTorch tensors ('cpu' or 'cuda').
         """
-        self.obs_buf = np.zeros(
-            (max_size, episode_limit, num_agents, obs_shape), dtype=np.float32)
-        self.state_buf = np.zeros((max_size, episode_limit, state_shape),
-                                  dtype=np.float32)
-        self.action_buf = np.zeros((max_size, episode_limit, num_agents),
-                                   dtype=np.int64)
-        self.action_onehot_buf = np.zeros(
-            (max_size, episode_limit, num_agents, num_actions), dtype=np.bool_)
-        self.available_action_buf = np.zeros(
-            (max_size, episode_limit, num_agents, num_actions), dtype=np.bool_)
-        self.reward_buf = np.zeros((max_size, episode_limit, 1),
-                                   dtype=np.float32)
-        self.terminal_buf = np.zeros((max_size, episode_limit, 1),
-                                     dtype=np.int8)
-        self.filled_buf = np.zeros((max_size, episode_limit, 1), dtype=np.int8)
-
-        self.state_shape = state_shape
-        self.obs_shape = obs_shape
-        self.num_actions = num_actions
-        self.num_agents = num_agents
-
         self.max_size = max_size
+        self.num_agents = num_agents
         self.episode_limit = episode_limit
+        self.obs_space = obs_space
+        self.state_space = state_space
+        self.action_space = action_space
+        self.reward_space = reward_space
+        self.done_space = done_space
         self.device = device
+
+        if self.state_space is not None:
+            self.store_global_state = True
+        else:
+            self.store_global_state = False
+
+        self.buffers = {}
+        self.reset()
+        self.buffer_keys = self.buffers.keys()
+
+    def reset(self) -> None:
+        self.buffers = dict(
+            obs=np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + self.obs_space,
+                dtype=np.float32,
+            ),
+            actions=np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + (self.num_agents, ),
+                dtype=np.int8,
+            ),
+            last_actions=np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + (self.num_agents, ),
+                dtype=np.int8,
+            ),
+            available_actions=np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + self.action_space,
+                dtype=np.int8,
+            ),
+            rewards=np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + self.reward_space,
+                dtype=np.float32,
+            ),
+            dones=np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + self.done_space,
+                dtype=np.bool_,
+            ),
+            filled=np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + self.done_space,
+                dtype=np.bool_,
+            ),
+        )
+        if self.store_global_state:
+            self.buffers['state'] = np.zeros(
+                (
+                    self.max_size,
+                    self.episode_limit,
+                ) + self.state_space,
+                dtype=np.float32,
+            )
 
         # memory management
         self.curr_ptr = 0
@@ -180,10 +282,10 @@ class ReplayBuffer:
         obs: np.ndarray,
         state: np.ndarray,
         actions: np.ndarray,
-        actions_onehot: np.ndarray,
+        last_actions: np.ndarray,
         available_actions: np.ndarray,
         rewards: np.ndarray,
-        terminated: np.ndarray,
+        done: np.ndarray,
         filled: np.ndarray,
     ) -> None:
         """Store a step of data in the replay buffer.
@@ -192,21 +294,22 @@ class ReplayBuffer:
         - obs (np.ndarray): Observation data.
         - state (np.ndarray): State data.
         - actions (np.ndarray): Actions taken.
-        - actions_onehot (np.ndarray): Actions in one-hot encoding.
+        - last_actions (np.ndarray): Actions in one-hot encoding.
         - available_actions (np.ndarray): Available actions for each agent.
         - rewards (np.ndarray): Reward received.
-        - terminated (np.ndarray): Termination flag.
+        - done (np.ndarray): Termination flag.
         - filled (np.ndarray): Filled flag.
         """
-        self.obs_buf[self.curr_ptr] = obs
-        self.state_buf[self.curr_ptr] = state
-        self.action_buf[self.curr_ptr] = actions
-        self.action_onehot_buf[self.curr_ptr] = actions_onehot
-        self.available_action_buf[self.curr_ptr] = available_actions
-
-        self.reward_buf[self.curr_ptr] = rewards
-        self.terminal_buf[self.curr_ptr] = terminated
-        self.filled_buf[self.curr_ptr] = filled
+        assert self.size() < self.max_size
+        self.buffers['obs'][self.curr_ptr] = obs
+        self.buffers['actions'][self.curr_ptr] = actions
+        self.buffers['last_actions'][self.curr_ptr] = last_actions
+        self.buffers['available_actions'][self.curr_ptr] = available_actions
+        self.buffers['rewards'][self.curr_ptr] = rewards
+        self.buffers['dones'][self.curr_ptr] = done
+        self.buffers['filled'][self.curr_ptr] = filled
+        if self.store_global_state:
+            self.buffers['state'][self.curr_ptr] = state
 
         self.curr_ptr = (self.curr_ptr + 1) % self.max_size
         self.curr_size = min(self.curr_size + 1, self.max_size)
@@ -236,18 +339,14 @@ class ReplayBuffer:
         Returns:
         - Dict[str, torch.Tensor]: Batch of experience samples.
         """
+        assert (
+            batch_size < self.curr_size
+        ), f'Batch Size: {batch_size} is larger than the current Buffer Size:{self.curr_size}'
+
         idx = np.random.randint(self.curr_size, size=batch_size)
 
-        batch = dict(
-            obs_batch=self.obs_buf[idx],
-            state_batch=self.state_buf[idx],
-            actions_batch=self.action_buf[idx],
-            actions_onehot_batch=self.action_onehot_buf[idx],
-            available_actions_batch=self.available_action_buf[idx],
-            reward_batch=self.reward_buf[idx],
-            terminated_batch=self.terminal_buf[idx],
-            filled_batch=self.filled_buf[idx],
-        )
+        batch = {key: self.buffers[key][idx] for key in self.buffer_keys}
+
         if to_torch:
             for key, val in batch.items():
                 batch[key] = self.to_torch(val)
