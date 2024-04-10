@@ -200,6 +200,7 @@ class ReplayBuffer:
         # memory management
         self.curr_ptr = 0
         self.curr_size = 0
+        # episode data buffer
         self.episode_data = EpisodeData(
             num_agents,
             episode_limit,
