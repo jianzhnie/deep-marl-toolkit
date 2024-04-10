@@ -7,19 +7,55 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append('../')
-from smac.env import StarCraft2Env
 
 from configs.arguments import get_common_args
 from configs.qmix_config import QMixConfig
 from marltoolkit.agents.qmix_agent import QMixAgent
 from marltoolkit.data import ReplayBuffer
-from marltoolkit.envs.smacv1.env_wrapper import SC2EnvWrapper
+from marltoolkit.envs.smacv1.smac_env import SMACWrapperEnv
 from marltoolkit.modules.actors import RNNActorModel
 from marltoolkit.modules.mixers import QMixerModel
 from marltoolkit.runners.episode_runner import (run_evaluate_episode,
                                                 run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
+
+
+def get_actor_input_dim(args: argparse.Namespace) -> None:
+    """Get the input shape of the actor model.
+
+    Args:
+        args (argparse.Namespace): The arguments
+    Returns:
+        input_shape (int): The input shape of the actor model.
+    """
+    input_dim = args.obs_dim
+    if args.use_gloabl_state:
+        input_dim += args.state_dim
+    if args.use_last_action:
+        input_dim += args.n_actions
+    if args.use_agent_id_onehot:
+        input_dim += args.num_agents
+    return input_dim
+
+
+def get_critic_input_dim(args: argparse.Namespace) -> None:
+    """Get the input shape of the critic model.
+
+    Args:
+        args (argparse.Namespace): The arguments.
+
+    Returns:
+        input_dim (int): The input shape of the critic model.
+    """
+    input_dim = args.obs_dim
+    if args.use_gloabl_state:
+        input_dim += args.state_dim
+    if args.use_last_action:
+        input_dim += args.n_actions
+    if args.use_agent_id_onehot:
+        input_dim += args.num_agents
+    return input_dim
 
 
 def main():
@@ -37,14 +73,17 @@ def main():
     device = torch.device('cuda') if torch.cuda.is_available(
     ) and args.cuda else torch.device('cpu')
 
-    env = StarCraft2Env(map_name=args.scenario, difficulty=args.difficulty)
-    env = SC2EnvWrapper(env)
-
+    env = SMACWrapperEnv(map_name=args.scenario, difficulty=args.difficulty)
     args.episode_limit = env.episode_limit
+    args.obs_dim = env.obs_dim
     args.obs_shape = env.obs_shape
+    args.state_dim = env.state_dim
     args.state_shape = env.state_shape
     args.num_agents = env.num_agents
     args.n_actions = env.n_actions
+    args.action_shape = env.action_shape
+    args.reward_shape = env.reward_shape
+    args.done_shape = env.done_shape
     args.device = device
 
     # init the logger before other steps
@@ -75,31 +114,36 @@ def main():
     else:  # wandb
         logger.load(writer)
 
+    args.actor_input_dim = get_actor_input_dim(args)
+    args.obs_shape = (args.actor_input_dim, )
+
     rpm = ReplayBuffer(
         max_size=args.replay_buffer_size,
         num_agents=args.num_agents,
-        num_actions=args.n_actions,
         episode_limit=args.episode_limit,
-        obs_shape=args.obs_shape,
-        state_shape=args.state_shape,
-        device=args.device,
+        obs_space=args.obs_shape,
+        state_space=args.state_shape,
+        action_space=args.action_shape,
+        reward_space=args.reward_shape,
+        done_space=args.done_shape,
+        device=device,
     )
 
     actor_model = RNNActorModel(
-        input_dim=args.obs_shape,
+        input_dim=args.actor_input_dim,
         rnn_hidden_dim=args.rnn_hidden_dim,
         n_actions=args.n_actions,
     )
 
     mixer_model = QMixerModel(
         num_agents=args.num_agents,
-        state_shape=args.state_shape,
+        state_dim=args.state_dim,
         mixing_embed_dim=args.mixing_embed_dim,
         hypernet_layers=args.hypernet_layers,
         hypernet_embed_dim=args.hypernet_embed_dim,
     )
 
-    marl_agent = QMixAgent(
+    agent = QMixAgent(
         actor_model=actor_model,
         mixer_model=mixer_model,
         num_agents=args.num_agents,
@@ -118,23 +162,22 @@ def main():
 
     progress_bar = ProgressBar(args.memory_warmup_size)
     while rpm.size() < args.memory_warmup_size:
-        run_train_episode(env, marl_agent, rpm, args)
+        run_train_episode(env, agent, rpm, args)
         progress_bar.update()
 
     steps_cnt = 0
     episode_cnt = 0
     progress_bar = ProgressBar(args.total_steps)
     while steps_cnt < args.total_steps:
-        episode_reward, episode_step, is_win, mean_loss, mean_td_error = run_train_episode(
-            env, marl_agent, rpm, args)
+        episode_reward, episode_step, is_win, mean_loss, mean_td_error = (
+            run_train_episode(env, agent, rpm, args))
         # update episodes and steps
         episode_cnt += 1
         steps_cnt += episode_step
 
         # learning rate decay
-        marl_agent.learning_rate = max(
-            marl_agent.lr_scheduler.step(episode_step),
-            marl_agent.min_learning_rate)
+        agent.learning_rate = max(agent.lr_scheduler.step(episode_step),
+                                  agent.min_learning_rate)
 
         train_results = {
             'env_step': episode_step,
@@ -142,10 +185,10 @@ def main():
             'win_rate': is_win,
             'mean_loss': mean_loss,
             'mean_td_error': mean_td_error,
-            'exploration': marl_agent.exploration,
-            'learning_rate': marl_agent.learning_rate,
+            'exploration': agent.exploration,
+            'learning_rate': agent.learning_rate,
             'replay_max_size': rpm.size(),
-            'target_update_count': marl_agent.target_update_count,
+            'target_update_count': agent.target_update_count,
         }
         if episode_cnt % args.train_log_interval == 0:
             text_logger.info(
@@ -155,7 +198,10 @@ def main():
 
         if episode_cnt % args.test_log_interval == 0:
             eval_rewards, eval_steps, eval_win_rate = run_evaluate_episode(
-                env, marl_agent, num_eval_episodes=5)
+                env,
+                agent,
+                args=args,
+            )
             text_logger.info(
                 '[Eval], episode: {}, eval_win_rate: {:.2f}, eval_rewards: {:.2f}'
                 .format(episode_cnt, eval_win_rate, eval_rewards))

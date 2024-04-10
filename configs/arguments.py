@@ -34,6 +34,24 @@ def get_common_args():
         default=1,
         help='Num of parallel threads running the env',
     )
+    parser.add_argument(
+        '--use_gloabl_state',
+        type=bool,
+        default=False,
+        help='whether to use the global state',
+    )
+    parser.add_argument(
+        '--use_last_action',
+        type=bool,
+        default=True,
+        help='whether to use the last action',
+    )
+    parser.add_argument(
+        '--use_agent_id_onehot',
+        type=bool,
+        default=True,
+        help='whether to use the agent id transform',
+    )
     parser.add_argument('--seed', type=int, default=123, help='random seed')
     parser.add_argument('--total_steps',
                         type=int,
