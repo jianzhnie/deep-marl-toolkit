@@ -14,7 +14,7 @@ class QMixerModel(nn.Module):
 
     Args:
         num_agents (int): The number of agents.
-        state_shape (int): The shape of the state.
+        state_dim (int): The shape of the state.
         hypernet_layers (int): The number of layers in the hypernetwork.
         mixing_embed_dim (int): The dimension of the mixing embedding.
         hypernet_embed_dim (int): The dimension of the hypernetwork embedding.
@@ -23,7 +23,7 @@ class QMixerModel(nn.Module):
     def __init__(
         self,
         num_agents: int = None,
-        state_shape: int = None,
+        state_dim: int = None,
         hypernet_layers: int = 2,
         mixing_embed_dim: int = 32,
         hypernet_embed_dim: int = 64,
@@ -31,42 +31,45 @@ class QMixerModel(nn.Module):
         super(QMixerModel, self).__init__()
 
         self.num_agents = num_agents
-        self.state_shape = state_shape
+        self.state_dim = state_dim
         self.mixing_embed_dim = mixing_embed_dim
         if hypernet_layers == 1:
-            self.hyper_w_1 = nn.Linear(state_shape,
+            self.hyper_w_1 = nn.Linear(state_dim,
                                        mixing_embed_dim * num_agents)
-            self.hyper_w_2 = nn.Linear(state_shape, mixing_embed_dim)
+            self.hyper_w_2 = nn.Linear(state_dim, mixing_embed_dim)
         elif hypernet_layers == 2:
             self.hyper_w_1 = nn.Sequential(
-                nn.Linear(state_shape, hypernet_embed_dim),
+                nn.Linear(state_dim, hypernet_embed_dim),
                 nn.ReLU(inplace=True),
                 nn.Linear(hypernet_embed_dim, mixing_embed_dim * num_agents),
             )
             self.hyper_w_2 = nn.Sequential(
-                nn.Linear(state_shape, hypernet_embed_dim),
+                nn.Linear(state_dim, hypernet_embed_dim),
                 nn.ReLU(inplace=True),
-                nn.Linear(hypernet_embed_dim, mixing_embed_dim))
+                nn.Linear(hypernet_embed_dim, mixing_embed_dim),
+            )
         else:
             raise ValueError('hypernet_layers should be "1" or "2"!')
 
         # State dependent bias for hidden layer
-        self.hyper_b_1 = nn.Linear(state_shape, mixing_embed_dim)
+        self.hyper_b_1 = nn.Linear(state_dim, mixing_embed_dim)
         self.hyper_b_2 = nn.Sequential(
-            nn.Linear(state_shape, mixing_embed_dim), nn.ReLU(inplace=True),
-            nn.Linear(mixing_embed_dim, 1))
+            nn.Linear(state_dim, mixing_embed_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(mixing_embed_dim, 1),
+        )
 
     def forward(self, agent_qs: torch.Tensor, states: torch.Tensor):
         """
         Args:
             agent_qs (torch.Tensor): (batch_size, T, num_agents)
-            states (torch.Tensor):   (batch_size, T, state_shape)
+            states (torch.Tensor):   (batch_size, T, state_dim)
         Returns:
             q_total (torch.Tensor):  (batch_size, T, 1)
         """
         batch_size = agent_qs.size(0)
-        # states : (batch_size * T, state_shape)
-        states = states.reshape(-1, self.state_shape)
+        # states : (batch_size * T, state_dim)
+        states = states.reshape(-1, self.state_dim)
         # agent_qs: (batch_size * T, 1, num_agents)
         agent_qs = agent_qs.view(-1, 1, self.num_agents)
 
@@ -102,13 +105,13 @@ class QMixerModel(nn.Module):
 
 class QMixerCentralFF(nn.Module):
 
-    def __init__(self, num_agents, state_shape, central_mixing_embed_dim,
+    def __init__(self, num_agents, state_dim, central_mixing_embed_dim,
                  central_action_embed):
         super(QMixerCentralFF, self).__init__()
 
         self.num_agents = num_agents
-        self.state_shape = state_shape
-        self.input_dim = num_agents * central_action_embed + state_shape
+        self.state_dim = state_dim
+        self.input_dim = num_agents * central_action_embed + state_dim
         self.central_mixing_embed_dim = central_mixing_embed_dim
         self.central_action_embed = central_action_embed
 
@@ -122,12 +125,14 @@ class QMixerCentralFF(nn.Module):
 
         # V(s) instead of a bias for the last layers
         self.vnet = nn.Sequential(
-            nn.Linear(state_shape, central_mixing_embed_dim),
-            nn.ReLU(inplace=True), nn.Linear(central_mixing_embed_dim, 1))
+            nn.Linear(state_dim, central_mixing_embed_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(central_mixing_embed_dim, 1),
+        )
 
     def forward(self, agent_qs, states):
         bs = agent_qs.size(0)
-        states = states.reshape(-1, self.state_shape)
+        states = states.reshape(-1, self.state_dim)
         agent_qs = agent_qs.reshape(
             -1, self.num_agents * self.central_action_embed)
 

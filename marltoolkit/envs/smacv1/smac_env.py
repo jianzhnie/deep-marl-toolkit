@@ -42,8 +42,8 @@ class SMACWrapperEnv(object):
         self.done_dim = 1
 
         # Observation and state shapes
-        self.obs_shape = (self.num_agents, self.obs_dim)
-        self.action_shape = (self.num_agents, self.action_dim)
+        self.obs_shape = (self.obs_dim, )
+        self.action_shape = (self.action_dim, )
         self.state_shape = (self.state_dim, )
         self.reward_shape = (self.reward_dim, )
         self.done_shape = (self.done_dim, )

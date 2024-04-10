@@ -85,7 +85,7 @@ class EpisodeData:
             ),
             filled=np.zeros(
                 (self.episode_limit, ) + self.done_space,
-                dtype=np.float32,
+                dtype=np.bool_,
             ),
         )
         if self.store_global_state:
@@ -122,7 +122,7 @@ class EpisodeData:
     def fill_mask(self) -> None:
         """Fill the mask for the current step."""
         assert self.size() < self.episode_limit
-        self.episode_buffer['filled'][self.curr_ptr] = 1.0
+        self.episode_buffer['filled'][self.curr_ptr] = True
         self.episode_buffer['done'][self.curr_ptr] = True
 
         self.curr_ptr += 1

@@ -2,7 +2,7 @@ import numpy as np
 
 
 class OneHotTransform(object):
-    """One hot transform for.
+    """One hot transform, convert index to one hot vector.
 
     Args:
         out_dim (int): The dimension of one hot vector.
