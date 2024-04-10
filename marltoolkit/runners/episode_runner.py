@@ -45,12 +45,10 @@ def run_train_episode(
             'actions': actions,
             'last_actions': last_actions,
             'available_actions': available_actions,
-            'reward': reward,
-            'done': done,
+            'rewards': reward,
+            'dones': done,
             'filled': False,
         }
-        for key, value in transitions.items():
-            print(key, value.shape)
         rpm.store_transitions(transitions)
         episode_reward += reward
         episode_step += 1

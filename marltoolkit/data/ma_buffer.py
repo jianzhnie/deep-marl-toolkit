@@ -65,7 +65,7 @@ class EpisodeData:
                 (
                     self.episode_limit,
                     self.num_agents,
-                ) + (self.num_agents, ),
+                ) + self.action_space,
                 dtype=np.int8,
             ),
             available_actions=np.zeros(
@@ -114,7 +114,7 @@ class EpisodeData:
         """
         assert self.size() < self.episode_limit
         for key in self.episode_keys:
-            self.episode_buffer[key][self.curr_ptr] = transitions[key].copy()
+            self.episode_buffer[key][self.curr_ptr] = transitions[key]
 
         self.curr_ptr += 1
         self.curr_size = min(self.curr_size + 1, self.episode_limit)
@@ -123,7 +123,7 @@ class EpisodeData:
         """Fill the mask for the current step."""
         assert self.size() < self.episode_limit
         self.episode_buffer['filled'][self.curr_ptr] = True
-        self.episode_buffer['done'][self.curr_ptr] = True
+        self.episode_buffer['dones'][self.curr_ptr] = True
 
         self.curr_ptr += 1
         self.curr_size = min(self.curr_size + 1, self.episode_limit)
@@ -217,6 +217,7 @@ class ReplayBuffer:
                 (
                     self.max_size,
                     self.episode_limit,
+                    self.num_agents,
                 ) + self.obs_space,
                 dtype=np.float32,
             ),
@@ -231,13 +232,15 @@ class ReplayBuffer:
                 (
                     self.max_size,
                     self.episode_limit,
-                ) + (self.num_agents, ),
+                    self.num_agents,
+                ) + self.action_space,
                 dtype=np.int8,
             ),
             available_actions=np.zeros(
                 (
                     self.max_size,
                     self.episode_limit,
+                    self.num_agents,
                 ) + self.action_space,
                 dtype=np.int8,
             ),

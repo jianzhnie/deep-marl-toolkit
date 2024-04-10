@@ -167,24 +167,24 @@ class QMixAgent(BaseAgent):
 
     def learn(
         self,
-        state_batch: np.ndarray,
-        actions_batch: np.ndarray,
-        reward_batch: np.ndarray,
-        terminated_batch: np.ndarray,
-        obs_batch: np.ndarray,
-        available_actions_batch: np.ndarray,
-        filled_batch: np.ndarray,
+        obs: np.ndarray,
+        state: np.ndarray,
+        actions: np.ndarray,
+        rewards: np.ndarray,
+        dones: np.ndarray,
+        available_actions: np.ndarray,
+        filled: np.ndarray,
         **kwargs,
     ):
         """
         Args:
+            obs (np.ndarray):                     (batch_size, T, num_agents, obs_shape)
             state (np.ndarray):                   (batch_size, T, state_shape)
             actions (np.ndarray):                 (batch_size, T, num_agents)
             reward (np.ndarray):                  (batch_size, T, 1)
             terminated (np.ndarray):              (batch_size, T, 1)
-            obs (np.ndarray):                     (batch_size, T, num_agents, obs_shape)
-            available_actions_batch (np.ndarray): (batch_size, T, num_agents, n_actions)
-            filled_batch (np.ndarray):            (batch_size, T, 1)
+            available_action (np.ndarray):        (batch_size, T, num_agents, n_actions)
+            filled (np.ndarray):                  (batch_size, T, 1)
         Returns:
             mean_loss (float): train loss
             mean_td_error (float): train TD error
@@ -197,27 +197,30 @@ class QMixAgent(BaseAgent):
         self.global_steps += 1
 
         # set the actions to torch.Long
-        actions_batch = actions_batch.to(self.device, dtype=torch.long)
+        actions = torch.tensor(actions, dtype=torch.long, device=self.device)
+        # set dones to torch.FloatTensor
+        dones = torch.tensor(dones, dtype=torch.float32, device=self.device)
+        filled = torch.tensor(filled, dtype=torch.float32, device=self.device)
         # get the batch_size and episode_length
-        batch_size = state_batch.shape[0]
-        episode_len = state_batch.shape[1]
+        batch_size = state.shape[0]
+        episode_len = state.shape[1]
 
         # get the relevant quantitles
-        reward_batch = reward_batch[:, :-1, :]
-        actions_batch = actions_batch[:, :-1, :].unsqueeze(-1)
-        terminated_batch = terminated_batch[:, :-1, :]
-        filled_batch = filled_batch[:, :-1, :]
+        actions = actions[:, :-1, :].unsqueeze(-1)
+        rewards = rewards[:, :-1, :]
+        dones = dones[:, :-1, :]
+        filled = filled[:, :-1, :]
 
-        mask = (1 - filled_batch) * (1 - terminated_batch)
+        mask = (1 - filled) * (1 - dones)
 
         # Calculate estimated Q-Values
         local_qs = []
         target_local_qs = []
         self.init_hidden_states(batch_size)
         for t in range(episode_len):
-            obs = obs_batch[:, t, :, :]
+            obs = obs[:, t, :, :]
             # obs: (batch_size * num_agents, obs_shape)
-            obs = obs.reshape(-1, obs_batch.shape[-1])
+            obs = obs.reshape(-1, obs.shape[-1])
             # Calculate estimated Q-Values
             local_q, self.hidden_state = self.actor_model(
                 obs, self.hidden_state)
@@ -242,16 +245,16 @@ class QMixAgent(BaseAgent):
         # Remove the last dim
         chosen_action_local_qs = torch.gather(local_qs[:, :-1, :, :],
                                               dim=3,
-                                              index=actions_batch).squeeze(3)
+                                              index=actions).squeeze(3)
 
         # mask unavailable actions
-        target_local_qs[available_actions_batch[:, 1:, :] == 0] = -1e10
+        target_local_qs[available_actions[:, 1:, :] == 0] = -1e10
 
         # Max over target Q-Values
         if self.double_q:
             # Get actions that maximise live Q (for double q-learning)
             local_qs_detach = local_qs.clone().detach()
-            local_qs_detach[available_actions_batch == 0] = -1e10
+            local_qs_detach[available_actions == 0] = -1e10
             cur_max_actions = local_qs_detach[:, 1:].max(dim=3,
                                                          keepdim=True)[1]
             target_local_max_qs = torch.gather(
@@ -264,9 +267,9 @@ class QMixAgent(BaseAgent):
         # mix_net, input: ([Q1, Q2, ...], state), output: Q_total
         if self.mixer_model is not None:
             chosen_action_global_qs = self.mixer_model(chosen_action_local_qs,
-                                                       state_batch[:, :-1, :])
+                                                       state[:, :-1, :])
             target_global_max_qs = self.target_mixer_model(
-                target_local_max_qs, state_batch[:, 1:, :])
+                target_local_max_qs, state[:, 1:, :])
 
         if self.mixer_model is None:
             target_max_qvals = target_local_max_qs
@@ -276,8 +279,7 @@ class QMixAgent(BaseAgent):
             chosen_action_qvals = chosen_action_global_qs
 
         # Calculate 1-step Q-Learning targets
-        target = reward_batch + self.gamma * (
-            1 - terminated_batch) * target_max_qvals
+        target = rewards + self.gamma * (1 - dones) * target_max_qvals
         #  Td-error
         td_error = target.detach() - chosen_action_qvals
 
