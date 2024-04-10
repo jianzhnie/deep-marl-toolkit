@@ -1,5 +1,4 @@
 import warnings
-from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Union
 
 import numpy as np
@@ -10,106 +9,9 @@ try:
     import psutil
 except ImportError:
     psutil = None
+from marltoolkit.data.base_buffer import BaseBuffer
 
-
-class BaseBuffer(ABC):
-    """Abstract base class for all buffers.
-
-    This class provides a basic structure for reinforcement learning experience
-    replay buffers.
-    """
-
-    def __init__(
-        self,
-        max_size: int,
-        num_envs: int,
-        num_agents: int,
-        obs_space: Union[int, Tuple],
-        state_space: Union[int, Tuple],
-        action_space: Union[int, Tuple],
-        reward_space: Union[int, Tuple],
-        done_space: Union[int, Tuple],
-        device: Union[torch.device, str] = 'cpu',
-        **kwargs,
-    ):
-        """Initialize the base buffer.
-
-        :param num_envs: Number of environments.
-        :param max_size: Maximum capacity of the buffer.
-        :param num_agents: Number of agents.
-        :param state_space: Dimensionality of the state space.
-        :param obs_space: Dimensionality of the observation space.
-        :param action_space: Dimensionality of the action space.
-        :param reward_space: Dimensionality of the reward space.
-        :param done_space: Dimensionality of the done space.
-        :param device: Device on which to store the buffer data.
-        :param kwargs: Additional keyword arguments.
-        """
-        super().__init__()
-        self.num_envs = num_envs
-        self.max_size = max_size
-        self.num_agents = num_agents
-        self.obs_space = obs_space
-        self.state_space = state_space
-        self.action_space = action_space
-        self.reward_space = reward_space
-        self.done_space = done_space
-        self.device = device
-        self.curr_ptr = 0
-        self.curr_size = 0
-
-    def reset(self) -> None:
-        """Reset the buffer."""
-        self.curr_ptr = 0
-        self.curr_size = 0
-
-    @abstractmethod
-    def store(self, *args) -> None:
-        """Add elements to the buffer."""
-        raise NotImplementedError
-
-    def extend(self, *args, **kwargs) -> None:
-        """Add a new batch of transitions to the buffer."""
-        for data in zip(*args):
-            self.store(*data)
-
-    @abstractmethod
-    def sample(self, **kwargs):
-        """Sample elements from the buffer."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def store_transitions(self, **kwargs):
-        """Store transitions in the buffer."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def store_episodes(self, **kwargs):
-        """Store episodes in the buffer."""
-        return NotImplementedError
-
-    @abstractmethod
-    def finish_path(self, **kwargs):
-        """Finish a trajectory path in the buffer."""
-        return NotImplementedError
-
-    def size(self) -> int:
-        """Get the current size of the buffer.
-
-        :return: The current size of the buffer.
-        """
-        return self.curr_size
-
-    def to_torch(self, array: np.ndarray, copy: bool = True) -> torch.Tensor:
-        """Convert a numpy array to a PyTorch tensor.
-
-        :param array: Numpy array to be converted.
-        :param copy: Whether to copy the data or not.
-        :return: PyTorch tensor.
-        """
-        if copy:
-            return torch.tensor(array).to(self.device)
-        return torch.as_tensor(array).to(self.device)
+__all__ = ['MaEpisodeData', 'OffPolicyBuffer', 'OffPolicyBufferRNN']
 
 
 class MaEpisodeData(object):
@@ -125,7 +27,7 @@ class MaEpisodeData(object):
         reward_space: Union[int, Tuple],
         done_space: Union[int, Tuple],
         **kwargs,
-    ):
+    ) -> None:
         self.num_envs = num_envs
         self.num_agents = num_agents
         self.episode_limit = episode_limit
@@ -139,7 +41,10 @@ class MaEpisodeData(object):
             self.store_global_state = True
         else:
             self.store_global_state = False
-        self.episode_buffer = {}
+
+        # memory management
+        self.curr_ptr = 0
+        self.curr_size = 0
         self.reset()
         self.episode_keys = self.episode_buffer.keys()
 
@@ -190,6 +95,9 @@ class MaEpisodeData(object):
             self.curr_ptr] = transitions['available_actions']
         if self.store_global_state:
             self.episode_buffer['state'][self.curr_ptr] = transitions['state']
+
+        self.curr_ptr = (self.curr_ptr + 1) % self.episode_limit
+        self.curr_size = min(self.curr_size + 1, self.episode_limit)
 
     def size(self) -> int:
         """get current size of replay memory."""
@@ -300,10 +208,6 @@ class OffPolicyBuffer(BaseBuffer):
                 (self.max_size, self.num_envs) + self.done_space,
                 dtype=np.bool_,
             ),
-            filled=np.zeros(
-                (self.max_size, self.num_envs) + self.done_space,
-                dtype=np.bool_,
-            ),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
@@ -391,52 +295,49 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
     def reset(self):
         self.buffers = dict(
             obs=np.zeros(
-                (self.max_size, self.episode_limit) + self.obs_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.obs_space,
                 dtype=np.float32,
             ),
             actions=np.zeros(
-                (self.max_size, self.episode_limit) + self.action_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                (self.num_agents, ),
                 dtype=np.int8,
             ),
             rewards=np.zeros(
-                (
-                    self.max_size,
-                    self.episode_limit,
-                ) + self.reward_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.reward_space,
                 dtype=np.float32,
             ),
             dones=np.zeros(
-                (
-                    self.max_size,
-                    self.episode_limit,
-                ) + self.done_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.done_space,
                 dtype=np.bool_,
             ),
             filled=np.zeros(
-                (
-                    self.max_size,
-                    self.episode_limit,
-                ) + self.done_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.done_space,
                 dtype=np.bool_,
             ),
             available_actions=np.zeros(
-                (self.max_size, self.episode_limit) + self.action_space,
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.action_space,
                 dtype=np.int8,
             ),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
-                (self.max_size, self.episode_limit) + self.state_space,
-                dtype=np.float32)
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.state_space,
+                dtype=np.float32,
+            )
 
     def store_episodes(self,
                        episode_buffer: Dict[str, np.ndarray] = None) -> None:
         if episode_buffer is None:
             episode_buffer = self.episode_data.episode_buffer
-        for env_idx in range(self.num_envs):
-            for k in self.buffer_keys:
-                self.buffers[k][
-                    self.curr_ptr] = episode_buffer[k][env_idx].copy()
+        for key in self.buffer_keys:
+            self.buffers[key][self.curr_ptr] = episode_buffer[key].copy()
         self.curr_ptr = (self.curr_ptr + 1) % self.max_size
         self.curr_size = min(self.curr_size + 1, self.max_size)
         self.episode_data.reset()
@@ -454,13 +355,13 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
         """
         next_obs, next_state, available_actions, filled = terminal_data
         self.episode_data.episode_buffer['obs'][epi_step,
-                                                env_idx] = next_obs[env_idx]
+                                                env_idx, :] = next_obs[env_idx]
         self.episode_data.episode_buffer['state'][
-            epi_step, env_idx] = next_state[env_idx]
+            epi_step, env_idx, :] = next_state[env_idx]
         self.episode_data.episode_buffer['available_actions'][
-            epi_step, env_idx] = (available_actions[env_idx])
-        self.episode_data.episode_buffer['filled'][epi_step,
-                                                   env_idx] = filled[epi_step,
+            epi_step, env_idx, :] = (available_actions[env_idx])
+        self.episode_data.episode_buffer['filled'][:,
+                                                   env_idx] = filled[:,
                                                                      env_idx]
 
     def sample(self,

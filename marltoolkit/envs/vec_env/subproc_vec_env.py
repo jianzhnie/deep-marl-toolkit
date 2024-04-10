@@ -645,11 +645,9 @@ def _worker(
                  info) = env.step(data)
                 done = terminated or truncated
                 if done:
-                    old_obs, old_state, old_info = obs, state, info
+                    _, _, old_info = obs, state, info
                     obs, state, info = env.reset()
                     # save final obs where user can get it, then reset
-                    info['final_obs'] = old_obs
-                    info['final_state'] = old_state
                     info['final_info'] = old_info
                 child_pipe.send(((obs, state, reward, done, info), True))
 

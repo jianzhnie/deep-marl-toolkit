@@ -12,7 +12,7 @@ from configs.qmix_config import QMixConfig
 from marltoolkit.agents.vdn_agent import VDNAgent
 from marltoolkit.data import OffPolicyBufferRNN
 from marltoolkit.envs.smacv1 import SMACWrapperEnv
-from marltoolkit.modules.actors import RNNActor
+from marltoolkit.modules.actors import RNNActorModel
 from marltoolkit.modules.mixers import VDNMixer
 from marltoolkit.runners.parallel_episode_runner import (run_evaluate_episode,
                                                          run_train_episode)
@@ -76,18 +76,18 @@ def main():
         logger.load(writer)
 
     rpm = OffPolicyBufferRNN(
+        max_size=args.replay_buffer_size,
         num_envs=args.num_train_envs,
-        buffer_size=args.replay_buffer_size,
         num_agents=args.num_agents,
         episode_limit=args.episode_limit,
-        state_space=args.state_shape,
         obs_space=args.obs_shape,
+        state_space=args.state_shape,
         action_space=args.action_shape,
         reward_space=args.reward_shape,
         done_space=args.done_shape,
         device=args.device,
     )
-    agent_model = RNNActor(
+    actor_model = RNNActorModel(
         input_dim=args.obs_dim,
         fc_hidden_dim=args.fc_hidden_dim,
         rnn_hidden_dim=args.rnn_hidden_dim,
@@ -97,7 +97,7 @@ def main():
     mixer_model = VDNMixer()
 
     marl_agent = VDNAgent(
-        agent_model=agent_model,
+        actor_model=actor_model,
         mixer_model=mixer_model,
         num_envs=args.num_train_envs,
         num_agents=args.num_agents,

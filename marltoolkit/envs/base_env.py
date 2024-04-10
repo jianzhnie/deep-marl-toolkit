@@ -19,6 +19,7 @@ class MultiAgentEnv(gym.Env):
 
     def __init__(self) -> None:
         self.num_agents = None
+        self.n_actions = None
         self.episode_limit = None
         if not hasattr(self, 'obs_space'):
             self.observation_space = None
@@ -52,9 +53,6 @@ class MultiAgentEnv(gym.Env):
         """Returns the shape of the state."""
         raise NotImplementedError
 
-    def get_avail_actions(self):
-        raise NotImplementedError
-
     def get_avail_agent_actions(self, agent_id):
         """Returns the available actions for agent_id."""
         raise NotImplementedError
@@ -62,12 +60,10 @@ class MultiAgentEnv(gym.Env):
     def get_available_actions(self):
         raise NotImplementedError
 
-    def _get_actions_one_hot(self):
+    def get_actions_one_hot(self):
         raise NotImplementedError
 
-    def get_total_actions(self):
-        """Returns the total number of actions an agent could ever take."""
-        # TODO: This is only suitable for a discrete 1 dimensional action space for each agent
+    def get_agents_id_one_hot(self):
         raise NotImplementedError
 
     def reset(
@@ -94,8 +90,8 @@ class MultiAgentEnv(gym.Env):
         env_info = {
             'obs_shape': self.get_obs_size(),
             'state_shape': self.get_state_size(),
-            'n_actions': self.get_total_actions(),
             'num_agents': self.num_agents,
+            'actions_shape': self.n_actions,
             'episode_limit': self.episode_limit,
         }
         return env_info

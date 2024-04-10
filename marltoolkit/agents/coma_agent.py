@@ -5,34 +5,36 @@ import numpy as np
 import torch
 from torch.distributions import Categorical
 
-from marltoolkit.modules.actors.rnn import RNNActor
-from marltoolkit.modules.critics.coma import COMACritic
+from marltoolkit.agents.base_agent import BaseAgent
+from marltoolkit.modules.actors.rnn import RNNActorModel
+from marltoolkit.modules.critics.coma import MLPCriticModel
 from marltoolkit.utils import (LinearDecayScheduler, MultiStepScheduler,
                                check_model_method, hard_target_update)
 
-from .base_agent import BaseAgent
-
 
 class ComaAgent(BaseAgent):
-    """ Coma algorithm
+    """Coma algorithm
     Args:
-        agent_model (nn.Model): agents' local q network for decision making.
+        actor_model (nn.Model): agents' local q network for decision making.
         critic_model (nn.Model): A mixing network which takes local q values as input
             to construct a global Q network.
         double_q (bool): Double-DQN.
+        td_lambda (float): lambda of td-lambda return
         gamma (float): discounted factor for reward computation.
-        lr (float): learning rate.
+        actor_lr (float): actor network learning rate
+        critic_lr (float): critic network learning rate
         clip_grad_norm (None, or float): clipped value of gradients' global norm.
     """
 
     def __init__(
         self,
-        agent_model: RNNActor = None,
-        critic_model: COMACritic = None,
-        n_agents: int = None,
+        actor_model: RNNActorModel = None,
+        critic_model: MLPCriticModel = None,
+        num_agents: int = None,
         double_q: bool = True,
         total_steps: int = 1e6,
         gamma: float = 0.99,
+        td_lambda: float = 0.8,
         actor_lr: float = 0.0005,
         critic_lr: float = 0.0001,
         exploration_start: float = 1.0,
@@ -44,21 +46,15 @@ class ComaAgent(BaseAgent):
         optim_eps: float = 0.00001,
         device: str = 'cpu',
     ):
-
-        check_model_method(agent_model, 'init_hidden', self.__class__.__name__)
-        check_model_method(agent_model, 'forward', self.__class__.__name__)
-        if critic_model is not None:
-            check_model_method(critic_model, 'forward',
-                               self.__class__.__name__)
-            assert hasattr(critic_model, 'n_agents') and not callable(
-                getattr(critic_model, 'n_agents',
-                        None)), 'critic_model needs to have attribute n_agents'
+        check_model_method(actor_model, 'init_hidden', self.__class__.__name__)
+        check_model_method(actor_model, 'forward', self.__class__.__name__)
         assert isinstance(gamma, float)
         assert isinstance(actor_lr, float)
 
-        self.n_agents = n_agents
+        self.num_agents = num_agents
         self.double_q = double_q
         self.gamma = gamma
+        self.td_lambda = td_lambda
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
         self.clip_grad_norm = clip_grad_norm
@@ -68,64 +64,76 @@ class ComaAgent(BaseAgent):
         self.target_update_count = 0
         self.update_target_interval = update_target_interval
         self.update_learner_freq = update_learner_freq
-
         self.device = device
-        self.agent_model = agent_model
-        self.target_agent_model = deepcopy(self.agent_model)
-        self.agent_model.to(device)
-        self.target_agent_model.to(device)
 
-        self.agent_params = list(self.agent_model.parameters())
+        self.actor_model = actor_model.to(device)
+        self.target_actor_model = deepcopy(actor_model).to(device)
 
-        self.critic_model = None
-        if critic_model is not None:
-            self.critic_model = critic_model
-            self.target_critic_model = deepcopy(self.critic_model)
-            self.critic_model.to(device)
-            self.target_critic_model.to(device)
-            self.critic_params = list(self.critic_model.parameters())
+        self.critic_model = critic_model.to(device)
+        self.target_critic_model = deepcopy(critic_model).to(device)
 
-        self.actor_optimizer = torch.optim.RMSprop(params=self.agent_params,
-                                                   lr=self.actor_lr,
-                                                   alpha=optim_alpha,
-                                                   eps=optim_eps)
+        self.actor_params = list(self.actor_model.parameters())
+        self.critic_params = list(self.critic_model.parameters())
 
-        self.critic_optimizer = torch.optim.RMSprop(params=self.agent_params,
-                                                    lr=self.critic_lr,
-                                                    alpha=optim_alpha,
-                                                    eps=optim_eps)
+        self.actor_optimizer = torch.optim.RMSprop(
+            params=self.actor_params,
+            lr=self.actor_lr,
+            alpha=optim_alpha,
+            eps=optim_eps,
+        )
+
+        self.critic_optimizer = torch.optim.RMSprop(
+            params=self.actor_params,
+            lr=self.critic_lr,
+            alpha=optim_alpha,
+            eps=optim_eps,
+        )
 
         self.ep_scheduler = LinearDecayScheduler(exploration_start,
                                                  total_steps * 0.8)
 
         lr_steps = [total_steps * 0.5, total_steps * 0.8]
-        self.lr_scheduler = MultiStepScheduler(start_value=self.actor_lr,
-                                               max_steps=total_steps,
-                                               milestones=lr_steps,
-                                               decay_factor=0.5)
+        self.lr_scheduler = MultiStepScheduler(
+            start_value=self.actor_lr,
+            max_steps=total_steps,
+            milestones=lr_steps,
+            decay_factor=0.5,
+        )
 
-    def reset_agent(self, batch_size=1):
-        self._init_hidden_states(batch_size)
+    def init_hidden_states(self, batch_size: int) -> None:
+        """Init a hidden tensor for every agent.
 
-    def _init_hidden_states(self, batch_size):
-        self.hidden_states = self.agent_model.init_hidden()
-        if self.hidden_states is not None:
-            self.hidden_states = self.hidden_states.unsqueeze(0).expand(
-                batch_size, self.n_agents, -1)
-
-        self.target_hidden_states = self.target_agent_model.init_hidden()
-        if self.target_hidden_states is not None:
-            self.target_hidden_states = self.target_hidden_states.unsqueeze(
-                0).expand(batch_size, self.n_agents, -1)
-
-    def sample(self, obs, available_actions):
-        ''' sample actions via epsilon-greedy
         Args:
-            obs (np.ndarray):               (n_agents, obs_shape)
-            available_actions (np.ndarray): (n_agents, n_actions)
+            batch_size (_type_): _description_
+        """
+        assert hasattr(
+            self.actor_model, 'init_hidden'
+        ), "actor must have rnn structure and has method 'init_hidden' to make hidden states"
+        hidden = self.actor_model.init_hidden()
+
+        if hidden is not None:
+            hidden = hidden.unsqueeze(0).expand(batch_size, self.num_agents,
+                                                -1)
+
+        tgt_hidden = self.target_actor_model.init_hidden()
+        if tgt_hidden is not None:
+            tgt_hidden = tgt_hidden.unsqueeze(0).expand(
+                batch_size, self.num_agents, -1)
+        return hidden, tgt_hidden
+
+    def sample(
+        self,
+        obs: np.array,
+        available_actions: np.array,
+        hidden_state: np.array = None,
+    ):
+        """sample actions via epsilon-greedy
+        Args:
+            obs (np.ndarray):               (num_agents, obs_shape)
+            available_actions (np.ndarray): (num_agents, n_actions)
         Returns:
             actions (np.ndarray): sampled actions of agents
-        '''
+        """
         epsilon = np.random.random()
         if epsilon < self.exploration:
             available_actions = torch.tensor(available_actions,
@@ -134,51 +142,52 @@ class ComaAgent(BaseAgent):
             actions = actions_dist.sample().long().cpu().detach().numpy()
 
         else:
-            actions = self.predict(obs, available_actions)
+            actions, hidden_state = self.predict(obs, available_actions,
+                                                 hidden_state)
 
         # update exploration
         self.exploration = max(self.ep_scheduler.step(), self.min_exploration)
         return actions
 
-    def predict(self, obs, available_actions):
-        '''take greedy actions
+    def predict(self, obs, available_actions, hidden_state=None):
+        """take greedy actions
         Args:
-            obs (np.ndarray):               (n_agents, obs_shape)
-            available_actions (np.ndarray): (n_agents, n_actions)
+            obs (np.ndarray):               (num_agents, obs_shape)
+            available_actions (np.ndarray): (num_agents, n_actions)
         Returns:
-            actions (np.ndarray):           (n_agents, )
-        '''
+            actions (np.ndarray):           (num_agents, )
+        """
         obs = torch.tensor(obs, dtype=torch.float32, device=self.device)
         available_actions = torch.tensor(available_actions,
                                          dtype=torch.long,
                                          device=self.device)
-        agents_q, self.hidden_states = self.agent_model(
-            obs, self.hidden_states)
-        # mask unavailable actions
-        agents_q[available_actions == 0] = -1e10
-        actions = agents_q.max(dim=1)[1].detach().cpu().numpy()
-        return actions
+        with torch.no_grad():
+            policy_logits, hidden_state = self.actor_model(obs, hidden_state)
+            # mask unavailable actions
+            policy_logits[available_actions == 0] = -1e10
+            actions = policy_logits.max(dim=1)[1].detach().cpu().numpy()
+        return (actions, hidden_state)
 
     def update_target(self):
-        hard_target_update(self.agent_model, self.target_agent_model)
+        hard_target_update(self.actor_model, self.target_actor_model)
         if self.critic_model is not None:
             hard_target_update(self.critic_model, self.target_critic_model)
 
     def learn(self, state_batch, actions_batch, reward_batch, terminated_batch,
               obs_batch, available_actions_batch, filled_batch, **kwargs):
-        '''
+        """
         Args:
             state (np.ndarray):                   (batch_size, T, state_shape)
-            actions (np.ndarray):                 (batch_size, T, n_agents)
+            actions (np.ndarray):                 (batch_size, T, num_agents)
             reward (np.ndarray):                  (batch_size, T, 1)
             terminated (np.ndarray):              (batch_size, T, 1)
-            obs (np.ndarray):                     (batch_size, T, n_agents, obs_shape)
-            available_actions_batch (np.ndarray): (batch_size, T, n_agents, n_actions)
+            obs (np.ndarray):                     (batch_size, T, num_agents, obs_shape)
+            available_actions_batch (np.ndarray): (batch_size, T, num_agents, n_actions)
             filled_batch (np.ndarray):            (batch_size, T, 1)
         Returns:
             mean_loss (float): train loss
             mean_td_error (float): train TD error
-        '''
+        """
         # update target model
         if self.global_steps % self.update_target_interval == 0:
             self.update_target()
@@ -203,23 +212,23 @@ class ComaAgent(BaseAgent):
         # Calculate estimated Q-Values
         local_qs = []
         target_local_qs = []
-        self._init_hidden_states(batch_size)
+        hidden_state, tgt_hidden_state = self.init_hidden_states(batch_size)
         for t in range(episode_len):
             obs = obs_batch[:, t, :, :]
-            # obs: (batch_size * n_agents, obs_shape)
+            # obs: (batch_size * num_agents, obs_shape)
             obs = obs.reshape(-1, obs_batch.shape[-1])
             # Calculate estimated Q-Values
-            local_q, self.hidden_states = self.agent_model(
-                obs, self.hidden_states)
-            #  local_q: (batch_size * n_agents, n_actions) -->  (batch_size, n_agents, n_actions)
-            local_q = local_q.reshape(batch_size, self.n_agents, -1)
+            local_q, hidden_state = self.actor_model(obs, hidden_state)
+            #  local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
+            local_q = local_q.reshape(batch_size, self.num_agents, -1)
             local_qs.append(local_q)
 
             # Calculate the Q-Values necessary for the target
-            target_local_q, self.target_hidden_states = self.target_agent_model(
-                obs, self.target_hidden_states)
-            # target_local_q: (batch_size * n_agents, n_actions) -->  (batch_size, n_agents, n_actions)
-            target_local_q = target_local_q.view(batch_size, self.n_agents, -1)
+            target_local_q, tgt_hidden_state = self.target_actor_model(
+                obs, tgt_hidden_state)
+            # target_local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
+            target_local_q = target_local_q.view(batch_size, self.num_agents,
+                                                 -1)
             target_local_qs.append(target_local_q)
 
         # Concat over time
@@ -280,7 +289,7 @@ class ComaAgent(BaseAgent):
         self.actor_optimizer.zero_grad()
         loss.backward()
         if self.clip_grad_norm:
-            torch.nn.utils.clip_grad_norm_(self.agent_params,
+            torch.nn.utils.clip_grad_norm_(self.actor_params,
                                            self.clip_grad_norm)
         self.actor_optimizer.step()
 
@@ -301,30 +310,34 @@ class ComaAgent(BaseAgent):
     ):
         pass
 
-    def save(self,
-             save_dir: str = None,
-             agent_model_name: str = 'agent_model.th',
-             critic_model_name: str = 'critic_model.th',
-             opt_name: str = 'optimizer.th'):
+    def save(
+        self,
+        save_dir: str = None,
+        actor_model_name: str = 'actor_model.th',
+        critic_model_name: str = 'critic_model.th',
+        opt_name: str = 'optimizer.th',
+    ):
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
-        agent_model_path = os.path.join(save_dir, agent_model_name)
+        actor_model_path = os.path.join(save_dir, actor_model_name)
         critic_model_path = os.path.join(save_dir, critic_model_name)
         optimizer_path = os.path.join(save_dir, opt_name)
-        torch.save(self.agent_model.state_dict(), agent_model_path)
+        torch.save(self.actor_model.state_dict(), actor_model_path)
         torch.save(self.critic_model.state_dict(), critic_model_path)
         torch.save(self.critic_optimizer.state_dict(), optimizer_path)
         print('save model successfully!')
 
-    def restore(self,
-                save_dir: str = None,
-                agent_model_name: str = 'agent_model.th',
-                critic_model_name: str = 'critic_model.th',
-                opt_name: str = 'optimizer.th'):
-        agent_model_path = os.path.join(save_dir, agent_model_name)
+    def restore(
+        self,
+        save_dir: str = None,
+        actor_model_name: str = 'actor_model.th',
+        critic_model_name: str = 'critic_model.th',
+        opt_name: str = 'optimizer.th',
+    ):
+        actor_model_path = os.path.join(save_dir, actor_model_name)
         critic_model_path = os.path.join(save_dir, critic_model_name)
         optimizer_path = os.path.join(save_dir, opt_name)
-        self.agent_model.load_state_dict(torch.load(agent_model_path))
+        self.actor_model.load_state_dict(torch.load(actor_model_path))
         self.critic_model.load_state_dict(torch.load(critic_model_path))
         self.critic_optimizer.load_state_dict(torch.load(optimizer_path))
         print('restore model successfully!')

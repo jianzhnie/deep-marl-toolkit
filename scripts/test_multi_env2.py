@@ -54,10 +54,14 @@ def test_dummy_envs():
 
 
 def test_subproc_envs():
-    parallels = 2
+    parallels = 10
     train_envs = make_subproc_envs(parallels=parallels)
     results = train_envs.reset()
-    print('Reset:', results)
+    obs, state, info = results
+    print('Env Reset:', '*' * 100)
+    print('obs:', obs.shape)
+    print('state:', state.shape)
+    print('info:', info)
 
     avail_actions = train_envs.get_available_actions()
     print('avail_actions:', avail_actions)
@@ -66,8 +70,13 @@ def test_subproc_envs():
     random_actions = actions_dist.sample().numpy().tolist()
     print('random_actions: ', random_actions)
     results = train_envs.step(random_actions)
-    print('Step:', results)
-    train_envs.close()
+    obs, state, rewards, dones, info = results
+    print('Env Step:', '*' * 100)
+    print('obs:', obs.shape)
+    print('state:', state.shape)
+    print('rewards:', rewards)
+    print('dones:', dones)
+    print('info:', info)
 
 
 if __name__ == '__main__':

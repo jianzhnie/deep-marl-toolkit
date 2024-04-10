@@ -20,7 +20,7 @@ def run_train_episode(
     env_dones = envs.buf_dones
     episode_step = 0
     episode_score = np.zeros(num_envs, dtype=np.float32)
-    filled = np.zeros([args.episode_limit, num_envs], dtype=np.int32)
+    filled = np.zeros([args.episode_limit, num_envs, 1], dtype=np.int32)
     episode_data = MaEpisodeData(
         num_envs,
         args.num_agents,
@@ -38,7 +38,7 @@ def run_train_episode(
         # Environment step
         next_obs, next_state, rewards, env_dones, info = envs.step(actions)
         # Fill the episode buffer
-        filled[episode_step, :] = np.ones(num_envs)
+        filled[episode_step, :] = np.ones([num_envs, 1])
         transitions = dict(
             obs=obs,
             state=state,
@@ -53,7 +53,7 @@ def run_train_episode(
         for env_idx in range(num_envs):
             if env_dones[env_idx]:
                 # Fill the rest of the episode with zeros
-                filled[episode_step, env_idx] = 0
+                filled[episode_step, env_idx, :] = 0
                 # Get the episode score from the info
                 final_info = info['final_info']
                 episode_score[env_idx] = final_info[env_idx]['episode_score']

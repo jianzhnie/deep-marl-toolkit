@@ -1,36 +1,13 @@
-import contextlib
 import multiprocessing as mp
-import os
 from typing import Any, Callable, Iterable, List, Optional, Type, Union
 
 import gymnasium as gym
 import numpy as np
+from gymnasium.vector.utils import clear_mpi_env_vars
 
 from marltoolkit.envs.smacv1.smac_env import SMACWrapperEnv
 from marltoolkit.envs.vec_env import BaseVecEnv, CloudpickleWrapper
 from marltoolkit.envs.vec_env.utils import combined_shape, flatten_list
-
-
-@contextlib.contextmanager
-def clear_mpi_env_vars():
-    """from mpi4py import MPI will call MPI_Init by default.
-
-    If the child process has MPI environment variables, MPI will think that the
-    child process is an MPI process just like the parent and do bad things such
-    as hang. This context manager is a hacky way to clear those environment
-    variables temporarily such as when we are starting multiprocessing
-    Processes.
-    """
-    removed_environment = {}
-    for k, v in list(os.environ.items()):
-        for prefix in ['OMPI_', 'PMI_']:
-            if k.startswith(prefix):
-                removed_environment[k] = v
-                del os.environ[k]
-    try:
-        yield
-    finally:
-        os.environ.update(removed_environment)
 
 
 def worker(
@@ -64,9 +41,7 @@ def worker(
                 remote.close()
                 break
             elif cmd == 'get_env_info':
-                remote.send(
-                    CloudpickleWrapper(
-                        (envs[0].env_info, envs[0].num_enemies)))
+                remote.send(CloudpickleWrapper((envs[0].env_info)))
             else:
                 raise NotImplementedError(
                     f'`{cmd}` is not implemented in the worker')
@@ -122,7 +97,7 @@ class SubprocVecSMAC(BaseVecEnv):
             work_remote.close()
 
         self.remotes[0].send(('get_env_info', None))
-        env_info = self.remotes[0].recv().x
+        env_info = self.remotes[0].recv().fn
         self.obs_space = env_info['obs_space']
         self.state_space = env_info['state_space']
         self.action_dim = self.n_actions = env_info['n_actions']
