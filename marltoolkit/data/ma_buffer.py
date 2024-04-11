@@ -290,7 +290,6 @@ class ReplayBuffer:
             - dones (np.ndarray): Termination flag.
             - filled (np.ndarray): Filled flag.
         """
-        assert self.size() < self.max_size
         if episode_buffer is None:
             episode_buffer = self.episode_data.episode_buffer
         for key in self.buffer_keys:
