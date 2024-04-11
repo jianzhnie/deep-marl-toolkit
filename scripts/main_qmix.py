@@ -115,7 +115,7 @@ def main():
         logger.load(writer)
 
     args.actor_input_dim = get_actor_input_dim(args)
-    args.obs_shape = (args.actor_input_dim, )
+    args.obs_shape = (args.num_agents, args.actor_input_dim)
 
     rpm = ReplayBuffer(
         max_size=args.replay_buffer_size,
@@ -198,10 +198,7 @@ def main():
 
         if episode_cnt % args.test_log_interval == 0:
             eval_rewards, eval_steps, eval_win_rate = run_evaluate_episode(
-                env,
-                agent,
-                args=args,
-            )
+                env, agent, args=args)
             text_logger.info(
                 '[Eval], episode: {}, eval_win_rate: {:.2f}, eval_rewards: {:.2f}'
                 .format(episode_cnt, eval_win_rate, eval_rewards))
