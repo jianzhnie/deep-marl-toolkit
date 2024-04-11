@@ -33,6 +33,7 @@ class QMixAgent(BaseAgent):
         double_q: bool = True,
         total_steps: int = 1e6,
         gamma: float = 0.99,
+        optimizer_type: str = 'rmsprop',
         learning_rate: float = 0.0005,
         min_learning_rate: float = 0.0001,
         exploration_start: float = 1.0,
@@ -43,7 +44,7 @@ class QMixAgent(BaseAgent):
         optim_alpha: float = 0.99,
         optim_eps: float = 0.00001,
         device: str = 'cpu',
-    ):
+    ) -> None:
         check_model_method(actor_model, 'init_hidden', self.__class__.__name__)
         check_model_method(actor_model, 'forward', self.__class__.__name__)
         if mixer_model is not None:
@@ -59,6 +60,7 @@ class QMixAgent(BaseAgent):
         self.num_agents = num_agents
         self.double_q = double_q
         self.gamma = gamma
+        self.optimizer_type = optimizer_type
         self.learning_rate = learning_rate
         self.min_learning_rate = min_learning_rate
         self.clip_grad_norm = clip_grad_norm
@@ -85,10 +87,16 @@ class QMixAgent(BaseAgent):
             self.target_mixer_model.to(device)
             self.params += list(self.mixer_model.parameters())
 
-        self.optimizer = torch.optim.RMSprop(params=self.params,
-                                             lr=self.learning_rate,
-                                             alpha=optim_alpha,
-                                             eps=optim_eps)
+        if self.optimizer_type == 'adam':
+            self.optimizer = torch.optim.Adam(params=self.params,
+                                              lr=self.learning_rate)
+        else:
+            self.optimizer = torch.optim.RMSprop(
+                params=self.params,
+                lr=self.learning_rate,
+                alpha=optim_alpha,
+                eps=optim_eps,
+            )
 
         self.ep_scheduler = LinearDecayScheduler(exploration_start,
                                                  total_steps * 0.8)
@@ -203,21 +211,14 @@ class QMixAgent(BaseAgent):
         actions_episode = torch.tensor(actions_episode,
                                        dtype=torch.long,
                                        device=self.device)
-        # set dones to torch.FloatTensor
-        dones_episode = torch.tensor(dones_episode,
-                                     dtype=torch.float32,
-                                     device=self.device)
-        filled_episode = torch.tensor(filled_episode,
-                                      dtype=torch.float32,
-                                      device=self.device)
         # get the batch_size and episode_length
         batch_size, episode_len, _ = state_episode.shape
 
         # get the relevant quantitles
         actions_episode = actions_episode[:, :-1, :].unsqueeze(-1)
         rewards_episode = rewards_episode[:, :-1, :]
-        dones_episode = dones_episode[:, :-1, :]
-        filled_episode = filled_episode[:, :-1, :]
+        dones_episode = dones_episode[:, :-1, :].float()
+        filled_episode = filled_episode[:, :-1, :].float()
 
         mask = (1 - dones_episode) * (1 - filled_episode)
 
