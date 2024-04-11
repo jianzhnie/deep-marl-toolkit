@@ -109,7 +109,7 @@ class EpisodeData:
             - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
-            - done (np.ndarray): Termination flag.
+            - dones (np.ndarray): Termination flag.
             - filled (np.ndarray): Filled flag.
         """
         assert self.size() < self.episode_limit
@@ -291,7 +291,7 @@ class ReplayBuffer:
             - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
-            - done (np.ndarray): Termination flag.
+            - dones (np.ndarray): Termination flag.
             - filled (np.ndarray): Filled flag.
         """
         assert self.size() < self.max_size
@@ -315,7 +315,7 @@ class ReplayBuffer:
             - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
-            - done (np.ndarray): Termination flag.
+            - dones (np.ndarray): Termination flag.
             - filled (np.ndarray): Filled flag.
         """
         self.episode_data.store_transitions(transitions)

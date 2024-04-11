@@ -49,11 +49,12 @@ def run_train_episode(
             'dones': done,
             'filled': False,
         }
+
         rpm.store_transitions(transitions)
+        obs, state = next_obs, next_state
+
         episode_reward += reward
         episode_step += 1
-        state = next_state
-        obs = next_obs
 
     # fill the episode
     for _ in range(episode_step, args.episode_limit):
@@ -68,7 +69,7 @@ def run_train_episode(
     if rpm.size() > args.memory_warmup_size:
         for _ in range(args.update_learner_freq):
             batch = rpm.sample(args.batch_size)
-            loss, td_error = agent.learn(**batch)
+            loss, td_error = agent.learn(batch)
             mean_loss.append(loss)
             mean_td_error.append(td_error)
 
@@ -93,6 +94,7 @@ def run_evaluate_episode(
         episode_step = 0
         done = False
         obs, state, info = env.reset()
+
         agents_id_onehot = env.get_agents_id_one_hot()
         if args.use_last_action:
             last_actions = np.zeros((args.num_agents, args.n_actions),
@@ -103,15 +105,19 @@ def run_evaluate_episode(
 
         while not done:
             available_actions = env.get_available_actions()
-            if args.use_last_action:
-                obs = np.concatenate([obs, last_actions], axis=-1)
-            if args.use_agent_id_onehot:
-                obs = np.concatenate([obs, agents_id_onehot], axis=-1)
-
             actions = agent.predict(obs, available_actions)
-            obs, state, reward, terminated, truncated, info = env.step(actions)
             last_actions = env.get_actions_one_hot(actions)
+            next_obs, next_state, reward, terminated, truncated, info = env.step(
+                actions)
+
+            if args.use_last_action:
+                next_obs = np.concatenate([next_obs, last_actions], axis=-1)
+            if args.use_agent_id_onehot:
+                next_obs = np.concatenate([next_obs, agents_id_onehot],
+                                          axis=-1)
+
             done = terminated or truncated
+            obs = next_obs
             episode_step += 1
             episode_reward += reward
 
