@@ -237,13 +237,13 @@ class ComaAgent(BaseAgent):
         # Calculate estimated Q-Values
         local_qs = []
         self.init_hidden_states(batch_size)
-        for t in range(episode_len):
+        for t in range(episode_len - 1):
             obs = obs_episode[:, t, :, :]
             # obs: (batch_size * num_agents, obs_shape)
             obs = obs.reshape(-1, obs_episode.shape[-1])
             # Calculate estimated Q-Values
             local_q, self.hidden_state = self.actor_model(obs)
-            #  local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
+            # local_q: (batch_size * num_agents, n_actions) -->  (batch_size, num_agents, n_actions)
             local_q = local_q.reshape(batch_size, self.num_agents, -1)
             local_qs.append(local_q)
 
@@ -364,6 +364,17 @@ class ComaAgent(BaseAgent):
         return ret[:, 0:-1]
 
     def nstep_returns(self, rewards, mask, values, nsteps) -> torch.Tensor:
+        """Calculate n-step returns.
+
+        Args:
+            rewards (_type_): _description_
+            mask (_type_): _description_
+            values (_type_): _description_
+            nsteps (_type_): _description_
+
+        Returns:
+            torch.Tensor: _description_
+        """
         nstep_values = torch.zeros_like(values[:, :-1])
         for t_start in range(rewards.size(1)):
             nstep_return_t = torch.zeros_like(values[:, 0])
