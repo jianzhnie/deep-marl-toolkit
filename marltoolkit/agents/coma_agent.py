@@ -10,7 +10,7 @@ from marltoolkit.agents.base_agent import BaseAgent
 from marltoolkit.modules.actors.rnn import RNNActorModel
 from marltoolkit.modules.critics.coma import MLPCriticModel
 from marltoolkit.utils import (LinearDecayScheduler, MultiStepScheduler,
-                               hard_target_update)
+                               hard_target_update, soft_target_update)
 
 
 class ComaAgent(BaseAgent):
@@ -37,15 +37,18 @@ class ComaAgent(BaseAgent):
         double_q: bool = True,
         total_steps: int = 1e6,
         gamma: float = 0.99,
-        optimizer_type: str = 'rmsprop',
+        nstep_return: int = 3,
         td_lambda: float = 0.8,
         entropy_coef: float = 0.01,
         actor_lr: float = 0.0005,
         critic_lr: float = 0.0001,
         exploration_start: float = 1.0,
         min_exploration: float = 0.01,
+        update_target_method: str = 'hard',
         update_target_interval: int = 100,
         update_learner_freq: int = 1,
+        optimizer_type: str = 'rmsprop',
+        add_value_last_step: bool = True,
         clip_grad_norm: float = 10,
         optim_alpha: float = 0.99,
         optim_eps: float = 0.00001,
@@ -56,16 +59,19 @@ class ComaAgent(BaseAgent):
         self.n_actions = n_actions
         self.double_q = double_q
         self.gamma = gamma
-        self.optimizer_type = optimizer_type
+        self.nstep_return = nstep_return
         self.td_lambda = td_lambda
         self.entropy_coef = entropy_coef
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
+        self.optimizer_type = optimizer_type
+        self.add_value_last_step = add_value_last_step
         self.clip_grad_norm = clip_grad_norm
         self.global_steps = 0
         self.exploration = exploration_start
         self.min_exploration = min_exploration
         self.target_update_count = 0
+        self.update_target_method = update_target_method
         self.update_target_interval = update_target_interval
         self.update_learner_freq = update_learner_freq
         self.device = device
@@ -178,8 +184,12 @@ class ComaAgent(BaseAgent):
         return actions
 
     def update_target(self) -> None:
-        hard_target_update(self.actor_model, self.target_actor_model)
-        hard_target_update(self.critic_model, self.target_critic_model)
+        if self.update_target_method == 'soft':
+            soft_target_update(self.actor_model, self.target_actor_model)
+            soft_target_update(self.critic_model, self.target_critic_model)
+        else:
+            hard_target_update(self.actor_model, self.target_actor_model)
+            hard_target_update(self.critic_model, self.target_critic_model)
 
     def learn(self, episode_data: Dict[str, np.ndarray]):
         """Update the model from a batch of experiences.
@@ -190,7 +200,7 @@ class ComaAgent(BaseAgent):
             - state (np.ndarray):                   (batch_size, T, state_shape)
             - actions (np.ndarray):                 (batch_size, T, num_agents)
             - rewards (np.ndarray):                  (batch_size, T, 1)
-            - dones (np.ndarray):              (batch_size, T, 1)
+            - dones (np.ndarray):                    (batch_size, T, 1)
             - available_actions (np.ndarray):        (batch_size, T, num_agents, n_actions)
             - filled (np.ndarray):                  (batch_size, T, 1)
 
@@ -202,10 +212,12 @@ class ComaAgent(BaseAgent):
         obs_episode = episode_data['obs']
         state_episode = episode_data['state']
         actions_episode = episode_data['actions']
-        available_actions_episode = episode_data['available_actions']
-        rewards_episode = episode_data['rewards']
-        dones_episode = episode_data['dones']
-        filled_episode = episode_data['filled']
+        available_actions_episode = episode_data[
+            'available_actions'][:, :-1, :]
+        rewards_episode = episode_data['rewards'][:, :-1, :]
+        dones_episode = episode_data['dones'][:, :-1, :].float()
+        filled_episode = episode_data['filled'][:, :-1, :].float()
+
         # update target model
         if self.global_steps % self.update_target_interval == 0:
             self.update_target()
@@ -213,18 +225,14 @@ class ComaAgent(BaseAgent):
 
         self.global_steps += 1
 
-        # set the actions to torch.Long
-        actions_episode = actions_episode.to(self.device, dtype=torch.long)
         # get the batch_size and episode_length
         batch_size, episode_len = state_episode.shape[:2]
-
+        # set the actions to torch.Long
+        actions_episode = actions_episode.to(self.device, dtype=torch.long)
         # get the relevant quantitles
-        rewards_episode = rewards_episode[:, :-1, :]
         actions_episode = actions_episode[:, :-1, :].unsqueeze(-1)
-        dones_episode = dones_episode[:, :-1, :]
-        filled_episode = filled_episode[:, :-1, :]
-
         mask = (1 - filled_episode) * (1 - dones_episode)
+        critic_mask = mask.clone()
 
         # Calculate estimated Q-Values
         local_qs = []
@@ -243,38 +251,34 @@ class ComaAgent(BaseAgent):
         local_qs = torch.stack(local_qs, dim=1)
         local_qs[available_actions_episode == 0] = -1e10
 
+        # Calculate q_vals and critic_loss
         q_vals, critic_loss = self.learn_critic(obs_episode, actions_episode,
-                                                rewards_episode, dones_episode,
-                                                mask)
+                                                rewards_episode, critic_mask)
+
         # Calculate the baseline
         q_vals = q_vals.reshape(-1, self.n_actions)
         pi = local_qs.view(-1, self.n_actions)
         baseline = (pi * q_vals).sum(-1).detach()
 
         # Calculate policy grad with mask
-
         q_taken = torch.gather(q_vals,
                                dim=1,
                                index=actions_episode.reshape(-1, 1)).squeeze(1)
-        pi_token = torch.gather(pi,
+        pi_taken = torch.gather(pi,
                                 dim=1,
                                 index=actions_episode.reshape(-1,
                                                               1)).squeeze(1)
-        pi_token[mask == 0] = 1.0
-        log_pi_taken = torch.log(pi_token)
+        pi_taken[mask == 0] = 1.0
+        log_pi_taken = torch.log(pi_taken)
 
         advantagees = (q_taken - baseline).detach()
-        coma_loss = -((advantagees * log_pi_taken) * mask).sum() / mask.sum()
-
-        dist_entropy = Categorical(pi).entropy().view(-1)
-        dist_entropy[mask == 0] = 0
-        entropy_loss = (dist_entropy * mask).sum() / mask.sum()
+        entropy = -torch.sum(pi * torch.log(pi + 1e-10), dim=-1)
+        actor_loss = (
+            -((advantagees * log_pi_taken + self.entropy_coef * entropy) *
+              mask).sum() / mask.sum())
 
         # Optimise actor model
-
         self.actor_optimizer.zero_grad()
-        actor_loss = coma_loss - self.entropy_coef * entropy_loss
-
         actor_loss.backward()
         if self.clip_grad_norm:
             torch.nn.utils.clip_grad_norm_(self.actor_params,
@@ -284,14 +288,13 @@ class ComaAgent(BaseAgent):
         for param_group in self.actor_optimizer.param_groups:
             param_group['lr'] = self.actor_lr
 
-        return (actor_loss.item(), coma_loss.item(), critic_loss)
+        return (actor_loss.item(), critic_loss.item())
 
     def learn_critic(
         self,
         obs_episode: torch.Tensor,
         actions_episode: torch.Tensor,
         rewards_episode: torch.Tensor,
-        dones_episode: torch.Tensor,
         mask_episode: torch.Tensor,
     ) -> None:
         """Update the critic model from a batch of experiences.
@@ -309,54 +312,31 @@ class ComaAgent(BaseAgent):
         Returns:
             - critic_loss (float): train loss
         """
-        # get the batch_size and episode_length
-        batch_size, episode_len = obs_episode.shape[:2]
-
         # Optimise critic
-        target_q_vals = self.target_critic_model(obs_episode)
-        target_q_vals_taken = torch.gather(target_q_vals,
-                                           dim=3,
-                                           index=actions_episode).squeeze(3)
-        # Calculate td-lambda targets
-        targets = self.build_td_lambda_targets(
-            rewards_episode,
-            dones_episode,
-            mask_episode,
-            target_q_vals_taken,
-            gamma=self.gamma,
-            td_lambda=self.td_lambda,
-        )
-        q_vals = torch.zeros_like(target_q_vals)[:, :-1]
+        with torch.no_grad():
+            target_q_vals = self.target_critic_model(obs_episode)
 
-        critic_loss = []
-        for t in reversed(episode_len):
-            mask_t = mask_episode[:, t].expand(-1, self.num_agents)
-            if mask_t.sum() == 0:
-                continue
+        targets_taken = torch.gather(target_q_vals,
+                                     dim=3,
+                                     index=actions_episode).squeeze(3)
 
-            q_t = self.critic_model()
-            q_vals[:, t] = q_t.view(batch_size, self.num_agents,
-                                    self.n_actions)
-            q_taken = (torch.gather(
-                q_t, dim=3,
-                index=actions_episode[:, t:t + 1]).squeeze(3).squeeze(1))
-            targets_t = targets[:, t]
+        # Calculate n-step returns
+        targets = self.nstep_returns(rewards_episode, mask_episode,
+                                     targets_taken, self.nstep_return)
 
-            td_error = q_taken - targets_t.detach()
+        q_vals = self.critic_model(obs_episode)[:, :-1]
+        q_taken = torch.gather(q_vals, dim=3, index=actions_episode).squeeze(3)
+        td_error = q_taken - targets.detach()
+        masked_td_error = td_error * mask_episode
+        critic_loss = (masked_td_error**2).sum() / mask_episode.sum()
+        self.critic_optimiser.zero_grad()
+        critic_loss.backward()
+        if self.clip_grad_norm:
+            torch.nn.utils.clip_grad_norm_(self.critic_params,
+                                           self.clip_grad_norm)
+        self.critic_optimiser.step()
 
-            # 0-out the targets that came from padded data
-            masked_td_error = td_error * mask_t
-
-            # Normal L2 loss, take mean over actual data
-            loss = (masked_td_error**2).sum() / mask_t.sum()
-            self.critic_optimizer.zero_grad()
-            if self.clip_grad_norm:
-                torch.nn.utils.clip_grad_norm_(self.critic_params,
-                                               self.clip_grad_norm)
-            self.critic_optimiser.step()
-            critic_loss.append(loss.item())
-
-        return q_vals, np.mean(critic_loss)
+        return q_vals, critic_loss
 
     def build_td_lambda_targets(self, rewards, dones, mask, target_qs, gamma,
                                 td_lambda):
@@ -383,13 +363,35 @@ class ComaAgent(BaseAgent):
         # Returns lambda-return from t=0 to t=T-1, i.e. in B*T-1*A
         return ret[:, 0:-1]
 
-    def save(
+    def nstep_returns(self, rewards, mask, values, nsteps) -> torch.Tensor:
+        nstep_values = torch.zeros_like(values[:, :-1])
+        for t_start in range(rewards.size(1)):
+            nstep_return_t = torch.zeros_like(values[:, 0])
+            for step in range(nsteps + 1):
+                t = t_start + step
+                if t >= rewards.size(1):
+                    break
+                elif step == nsteps:
+                    nstep_return_t += self.gamma**step * values[:, t] * mask[:,
+                                                                             t]
+                elif t == rewards.size(1) - 1 and self.add_value_last_step:
+                    nstep_return_t += self.gamma**step * rewards[:,
+                                                                 t] * mask[:,
+                                                                           t]
+                    nstep_return_t += self.gamma**(step + 1) * values[:, t + 1]
+                else:
+                    nstep_return_t += self.gamma**(
+                        step) * rewards[:, t] * mask[:, t]
+            nstep_values[:, t_start, :] = nstep_return_t
+        return nstep_values
+
+    def save_model(
         self,
         save_dir: str = None,
         actor_model_name: str = 'actor_model.th',
         critic_model_name: str = 'critic_model.th',
         opt_name: str = 'optimizer.th',
-    ):
+    ) -> None:
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
         actor_model_path = os.path.join(save_dir, actor_model_name)
@@ -400,13 +402,13 @@ class ComaAgent(BaseAgent):
         torch.save(self.critic_optimizer.state_dict(), optimizer_path)
         print('save model successfully!')
 
-    def restore(
+    def load_model(
         self,
         save_dir: str = None,
         actor_model_name: str = 'actor_model.th',
         critic_model_name: str = 'critic_model.th',
         opt_name: str = 'optimizer.th',
-    ):
+    ) -> None:
         actor_model_path = os.path.join(save_dir, actor_model_name)
         critic_model_path = os.path.join(save_dir, critic_model_name)
         optimizer_path = os.path.join(save_dir, opt_name)
