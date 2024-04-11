@@ -154,9 +154,7 @@ class QMixAgent(BaseAgent):
         available_actions = torch.tensor(available_actions,
                                          dtype=torch.long,
                                          device=self.device)
-        with torch.no_grad():
-            agents_q, self.hidden_state = self.actor_model(
-                obs, self.hidden_state)
+        agents_q, self.hidden_state = self.actor_model(obs, self.hidden_state)
 
         # mask unavailable actions
         agents_q[available_actions == 0] = -1e10

@@ -51,10 +51,7 @@ class EpisodeData:
     def reset(self):
         self.episode_buffer = dict(
             obs=np.zeros(
-                (
-                    self.episode_limit,
-                    self.num_agents,
-                ) + self.obs_space,
+                (self.episode_limit, ) + self.obs_space,
                 dtype=np.float32,
             ),
             actions=np.zeros(
@@ -217,7 +214,6 @@ class ReplayBuffer:
                 (
                     self.max_size,
                     self.episode_limit,
-                    self.num_agents,
                 ) + self.obs_space,
                 dtype=np.float32,
             ),
