@@ -159,8 +159,8 @@ def main():
                 .format(
                     episode_cnt,
                     eval_res_dict['episode_step'],
-                    eval_res_dict['eval_win_rate'],
-                    eval_res_dict['eval_rewards'],
+                    eval_res_dict['win_rate'],
+                    eval_res_dict['episode_rewards'],
                 ))
             logger.log_test_data(eval_res_dict, steps_cnt)
 
