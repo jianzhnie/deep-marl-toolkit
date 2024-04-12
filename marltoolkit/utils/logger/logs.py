@@ -1,6 +1,6 @@
 import logging
 import os
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 
 from .logging import get_logger
 
@@ -45,8 +45,8 @@ def get_outdir(path, *paths, inc=False):
 
 
 def avg_val_from_list_of_dicts(list_of_dicts):
-    sum_values = OrderedDict()
-    count_dicts = OrderedDict()
+    sum_values = defaultdict(int)
+    count_dicts = defaultdict(int)
 
     # Transpose the list of dictionaries into a list of key-value pairs
     for dictionary in list_of_dicts:

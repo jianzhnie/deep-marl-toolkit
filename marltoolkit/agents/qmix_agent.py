@@ -309,7 +309,11 @@ class QMixAgent(BaseAgent):
         for param_group in self.optimizer.param_groups:
             param_group['lr'] = self.learning_rate
 
-        return loss.item(), mean_td_error.item()
+        results = {
+            'loss': loss.item(),
+            'mean_td_error': mean_td_error.item(),
+        }
+        return results
 
     def save_model(
         self,
