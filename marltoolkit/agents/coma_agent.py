@@ -4,6 +4,7 @@ from typing import Dict
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.distributions import Categorical
 
 from marltoolkit.agents.base_agent import BaseAgent
@@ -181,7 +182,8 @@ class ComaAgent(BaseAgent):
             obs, self.hidden_state)
         # mask unavailable actions
         policy_logits[available_actions == 0] = -1e10
-        actions = policy_logits.max(dim=1)[1].detach().cpu().numpy()
+        pi_logits = F.softmax(policy_logits, dim=-1)
+        actions = pi_logits.max(dim=1)[1].detach().cpu().numpy()
         return actions
 
     def update_target(self, update_method: str = 'hard') -> None:
@@ -210,7 +212,7 @@ class ComaAgent(BaseAgent):
             - rewards (np.ndarray):                  (batch_size, T, 1)
             - dones (np.ndarray):                    (batch_size, T, 1)
             - available_actions (np.ndarray):        (batch_size, T, num_agents, n_actions)
-            - filled (np.ndarray):                  (batch_size, T, 1)
+            - filled (np.ndarray):                   (batch_size, T, 1)
 
         Returns:
             - mean_loss (float): train loss
@@ -218,7 +220,6 @@ class ComaAgent(BaseAgent):
         """
         # get the data from episode_data buffer
         obs_episode = episode_data['obs']
-        state_episode = episode_data['state']
         actions_episode = episode_data['actions']
         available_actions_episode = episode_data['available_actions']
         rewards_episode = episode_data['rewards']
@@ -233,11 +234,12 @@ class ComaAgent(BaseAgent):
         self.global_steps += 1
 
         # get the batch_size and episode_length
-        batch_size, episode_len = state_episode.shape[:2]
+        batch_size, episode_len, num_agents, _ = obs_episode.shape
         # set the actions to torch.Long
         actions_episode = actions_episode.to(self.device, dtype=torch.long)
         mask = (1 - filled_episode) * (1 - dones_episode)
         critic_mask = mask.clone()
+        mask = mask.repeat(1, 1, self.num_agents).view(-1)
 
         # Calculate estimated Q-Values
         local_qs = []
@@ -253,16 +255,22 @@ class ComaAgent(BaseAgent):
             local_qs.append(local_q)
 
         # Concat over time
+        # local_qs: (batch_size, T, num_agents, n_actions)
         local_qs = torch.stack(local_qs, dim=1)
         local_qs[available_actions_episode == 0] = -1e10
 
+        logits_pi = F.softmax(local_qs, dim=-1)
         # Calculate q_vals and critic_loss
         q_vals, critic_loss = self.learn_critic(obs_episode, actions_episode,
                                                 rewards_episode, critic_mask)
 
         # Calculate the baseline
+        # q_vals: (batch_size * T * num_agents, n_actions)
         q_vals = q_vals.reshape(-1, self.n_actions)
-        pi = local_qs.view(-1, self.n_actions)
+        # pi: (batch_size * T * num_agents, n_actions)
+        pi = logits_pi.view(-1, self.n_actions)
+        # Calculate the baseline
+        # baseline: (batch_size * T * num_agents)
         baseline = (pi * q_vals).sum(-1).detach()
 
         # Calculate policy grad with mask
@@ -310,32 +318,35 @@ class ComaAgent(BaseAgent):
 
         Args: episode_data (dict) with the following:
 
-            - obs (np.ndarray):                     (batch_size, T, num_agents, obs_shape)
-            - state (np.ndarray):                   (batch_size, T, state_shape)
-            - actions (np.ndarray):                 (batch_size, T, num_agents)
-            - rewards (np.ndarray):                 (batch_size, T, 1)
-            - dones (np.ndarray):                    (batch_size, T, 1)
-            - available_actions (np.ndarray):        (batch_size, T, num_agents, n_actions)
-            - filled (np.ndarray):                   (batch_size, T, 1)
+            - obs_episode (np.ndarray):                     (batch_size, T, num_agents, obs_shape)
+            - actions_episode (np.ndarray):                 (batch_size, T, num_agents)
+            - rewards_episode (np.ndarray):                  (batch_size, T, 1)
+            - mask_episode (np.ndarray):                     (batch_size, T, 1)
 
         Returns:
             - critic_loss (float): train loss
         """
         # Optimise critic
+        # target_q_vals: (batch_size, T, num_agents, n_actions)
         with torch.no_grad():
-            target_q_vals = self.target_critic_model(obs_episode).squeeze(3)
+            target_q_vals = self.target_critic_model(obs_episode)
 
+        # targets_taken: (batch_size, T, num_agents)
         targets_taken = torch.gather(target_q_vals,
-                                     dim=2,
-                                     index=actions_episode)
+                                     dim=3,
+                                     index=actions_episode).squeeze(3)
 
         # Calculate n-step returns
-        # targets = self.nstep_returns(rewards_episode, targets_taken,
-        #                              mask_episode, self.nstep_return)
+        targets = self.nstep_returns(rewards_episode, targets_taken,
+                                     mask_episode, self.nstep_return)
         targets = targets_taken
-        q_vals = self.critic_model(obs_episode).squeeze(3)
-        q_taken = torch.gather(q_vals, dim=2, index=actions_episode)
+        # q_vals: (batch_size, T, num_agents)
+        q_vals = self.critic_model(obs_episode)
+        # q_taken: (batch_size, T, num_agents)
+        q_taken = torch.gather(q_vals, dim=3, index=actions_episode)
+        # td_error: (batch_size, T, num_agents)
         td_error = q_taken - targets.detach()
+        # masked_td_error: (batch_size, T, num_agents)
         masked_td_error = td_error * mask_episode
         critic_loss = (masked_td_error**2).sum() / mask_episode.sum()
         self.critic_optimizer.zero_grad()
@@ -392,7 +403,7 @@ class ComaAgent(BaseAgent):
         (batch_size, episode_len, num_agents) = values.shape
         nstep_values = torch.zeros_like(values[:, :-1, :], dtype=values.dtype)
         for t_start in range(episode_len):
-            nstep_return_t = torch.zeros_like()
+            nstep_return_t = torch.zeros_like(values[:, :0, :])
             for step in range(nsteps + 1):
                 t = t_start + step
                 if t >= episode_len:
@@ -408,8 +419,8 @@ class ComaAgent(BaseAgent):
                     nstep_return_t += self.gamma**(step + 1) * values[:,
                                                                       t + 1, :]
                 else:
-                    nstep_return_t += (self.gamma**(step) * rewards[:, t, :] *
-                                       mask[:, t, :])
+                    nstep_return_t += self.gamma**(
+                        step) * rewards[:, t] * mask[:, t]
             nstep_values[:, t_start, :] = nstep_return_t
         return nstep_values
 

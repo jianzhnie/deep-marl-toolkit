@@ -101,12 +101,12 @@ class QMixAgent(BaseAgent):
         self.ep_scheduler = LinearDecayScheduler(exploration_start,
                                                  total_steps * 0.8)
 
-        lr_steps = [total_steps * 0.5, total_steps * 0.8]
+        lr_milstons = [total_steps * 0.5, total_steps * 0.8]
         self.lr_scheduler = MultiStepScheduler(
             start_value=learning_rate,
             max_steps=total_steps,
-            milestones=lr_steps,
-            decay_factor=0.5,
+            milestones=lr_milstons,
+            decay_factor=0.1,
         )
 
         # 执行过程中，要为每个agent都维护一个 hidden_state

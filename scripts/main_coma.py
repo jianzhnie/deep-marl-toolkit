@@ -95,9 +95,11 @@ def main():
         n_actions=args.n_actions,
     )
 
-    critic_model = MLPCriticModel(input_dim=args.obs_dim,
-                                  hidden_dim=args.fc_hidden_dim,
-                                  output_dim=1)
+    critic_model = MLPCriticModel(
+        input_dim=args.obs_dim,
+        hidden_dim=args.fc_hidden_dim,
+        output_dim=args.n_actions,
+    )
     agent = ComaAgent(
         actor_model=actor_model,
         critic_model=critic_model,
@@ -155,12 +157,12 @@ def main():
         if episode_cnt % args.test_log_interval == 0:
             eval_res_dict = run_eval_episode(env, agent, args=args)
             text_logger.info(
-                '[Eval], episode: {}, eval_episode_step:{:.2f}, eval_win_rate: {:.2f}, eval_rewards: {:.2f}'
+                '[Eval], episode: {}, eval_episode_step:{:.2f}, eval_win_rate: {:.2f}, eval_reward: {:.2f}'
                 .format(
                     episode_cnt,
                     eval_res_dict['episode_step'],
                     eval_res_dict['win_rate'],
-                    eval_res_dict['episode_rewards'],
+                    eval_res_dict['episode_reward'],
                 ))
             logger.log_test_data(eval_res_dict, steps_cnt)
 

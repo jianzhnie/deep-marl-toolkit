@@ -23,6 +23,7 @@ class RNNActorModel(nn.Module):
         **kwargs,
     ) -> None:
         super(RNNActorModel, self).__init__()
+
         self.rnn_hidden_dim = rnn_hidden_dim
         self.fc1 = nn.Linear(input_dim, fc_hidden_dim)
         self.rnn = nn.GRUCell(input_size=fc_hidden_dim,
@@ -47,8 +48,8 @@ class RNNActorModel(nn.Module):
                                self.rnn_hidden_dim).to(inputs.device)
 
         hidden_state = self.rnn(out, h_in)
-        q_value = self.fc2(hidden_state)  # (batch_size, n_actions)
-        return q_value, hidden_state
+        out = self.fc2(hidden_state)  # (batch_size, n_actions)
+        return out, hidden_state
 
     def update(self, model: nn.Module) -> None:
         self.load_state_dict(model.state_dict())
