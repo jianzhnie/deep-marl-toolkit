@@ -44,6 +44,25 @@ def get_outdir(path, *paths, inc=False):
     return outdir
 
 
+def avg_val_from_list_of_dicts(list_of_dicts):
+    sum_values = OrderedDict()
+    count_dicts = OrderedDict()
+
+    # Transpose the list of dictionaries into a list of key-value pairs
+    for dictionary in list_of_dicts:
+        for key, value in dictionary.items():
+            sum_values[key] += value
+            count_dicts[key] += 1
+
+    # Calculate the average values using a dictionary comprehension
+    avg_val_dict = {
+        key: sum_value / count_dicts[key]
+        for key, sum_value in sum_values.items()
+    }
+
+    return avg_val_dict
+
+
 def update_summary(train_metrics, eval_metrics, log_wandb=False):
     rowd = OrderedDict()
     rowd.update([('train_' + k, v) for k, v in train_metrics.items()])

@@ -6,6 +6,7 @@ import numpy as np
 from marltoolkit.agents.base_agent import BaseAgent
 from marltoolkit.data.ma_buffer import ReplayBuffer
 from marltoolkit.envs import MultiAgentEnv
+from marltoolkit.utils.logger.logs import avg_val_from_list_of_dicts
 
 
 def run_train_episode(
@@ -64,30 +65,28 @@ def run_train_episode(
     rpm.store_episodes()
     is_win = env.win_counted
 
-    mean_loss = []
-    mean_td_error = []
+    train_res_lst = []
     if rpm.size() > args.memory_warmup_size:
         for _ in range(args.update_learner_freq):
             batch = rpm.sample(args.batch_size)
-            loss, td_error = agent.learn(batch)
-            mean_loss.append(loss)
-            mean_td_error.append(td_error)
+            results = agent.learn(batch)
+            train_res_lst.append(results)
 
-    mean_loss = np.mean(mean_loss) if mean_loss else None
-    mean_td_error = np.mean(mean_td_error) if mean_td_error else None
+    train_res_dict = avg_val_from_list_of_dicts(train_res_lst)
 
-    return episode_reward, episode_step, is_win, mean_loss, mean_td_error
+    train_res_dict['episode_reward'] = episode_reward
+    train_res_dict['episode_step'] = episode_step
+    train_res_dict['win_rate'] = is_win
+    return train_res_dict
 
 
-def run_evaluate_episode(
+def run_eval_episode(
     env: MultiAgentEnv,
     agent: BaseAgent,
     num_eval_episodes: int = 5,
     args: argparse.Namespace = None,
 ) -> Tuple[float, float, float]:
-    eval_is_win_buffer = []
-    eval_reward_buffer = []
-    eval_steps_buffer = []
+    eval_res_list = []
     for _ in range(num_eval_episodes):
         agent.init_hidden_states(batch_size=1)
         episode_reward = 0.0
@@ -122,13 +121,10 @@ def run_evaluate_episode(
             episode_reward += reward
 
         is_win = env.win_counted
-
-        eval_reward_buffer.append(episode_reward)
-        eval_steps_buffer.append(episode_step)
-        eval_is_win_buffer.append(is_win)
-
-    eval_rewards = np.mean(eval_reward_buffer)
-    eval_steps = np.mean(eval_steps_buffer)
-    eval_win_rate = np.mean(eval_is_win_buffer)
-
-    return eval_rewards, eval_steps, eval_win_rate
+        eval_res_list.append({
+            'episode_reward': episode_reward,
+            'episode_step': episode_step,
+            'win_rate': is_win,
+        })
+    eval_res_dict = avg_val_from_list_of_dicts(eval_res_list)
+    return eval_res_dict

@@ -165,7 +165,8 @@ class ComaAgent(BaseAgent):
         return actions
 
     def predict(self, obs: torch.Tensor, available_actions: torch.Tensor):
-        """take greedy actions
+        """Predict actions for each agent.
+
         Args:
             obs (np.ndarray):               (num_agents, obs_shape)
             available_actions (np.ndarray): (num_agents, n_actions)
@@ -183,13 +184,20 @@ class ComaAgent(BaseAgent):
         actions = policy_logits.max(dim=1)[1].detach().cpu().numpy()
         return actions
 
-    def update_target(self) -> None:
-        if self.update_target_method == 'soft':
+    def update_target(self, update_method: str = 'hard') -> None:
+        """Update target network with the current network parameters.
+
+        Args:
+            update_method (str): update method, hard or soft
+        """
+        if update_method == 'soft':
             soft_target_update(self.actor_model, self.target_actor_model)
             soft_target_update(self.critic_model, self.target_critic_model)
-        else:
+        elif update_method == 'hard':
             hard_target_update(self.actor_model, self.target_actor_model)
             hard_target_update(self.critic_model, self.target_critic_model)
+        else:
+            raise ValueError('update method not supported')
 
     def learn(self, episode_data: Dict[str, np.ndarray]):
         """Update the model from a batch of experiences.
@@ -212,15 +220,14 @@ class ComaAgent(BaseAgent):
         obs_episode = episode_data['obs']
         state_episode = episode_data['state']
         actions_episode = episode_data['actions']
-        available_actions_episode = episode_data[
-            'available_actions'][:, :-1, :]
-        rewards_episode = episode_data['rewards'][:, :-1, :]
-        dones_episode = episode_data['dones'][:, :-1, :].float()
-        filled_episode = episode_data['filled'][:, :-1, :].float()
+        available_actions_episode = episode_data['available_actions']
+        rewards_episode = episode_data['rewards']
+        dones_episode = episode_data['dones'].float()
+        filled_episode = episode_data['filled'].float()
 
         # update target model
         if self.global_steps % self.update_target_interval == 0:
-            self.update_target()
+            self.update_target(update_method=self.update_target_method)
             self.target_update_count += 1
 
         self.global_steps += 1
@@ -229,15 +236,13 @@ class ComaAgent(BaseAgent):
         batch_size, episode_len = state_episode.shape[:2]
         # set the actions to torch.Long
         actions_episode = actions_episode.to(self.device, dtype=torch.long)
-        # get the relevant quantitles
-        actions_episode = actions_episode[:, :-1, :].unsqueeze(-1)
         mask = (1 - filled_episode) * (1 - dones_episode)
         critic_mask = mask.clone()
 
         # Calculate estimated Q-Values
         local_qs = []
         self.init_hidden_states(batch_size)
-        for t in range(episode_len - 1):
+        for t in range(episode_len):
             obs = obs_episode[:, t, :, :]
             # obs: (batch_size * num_agents, obs_shape)
             obs = obs.reshape(-1, obs_episode.shape[-1])
@@ -288,7 +293,11 @@ class ComaAgent(BaseAgent):
         for param_group in self.actor_optimizer.param_groups:
             param_group['lr'] = self.actor_lr
 
-        return (actor_loss.item(), critic_loss.item())
+        results = {
+            'actor_loss': actor_loss.item(),
+            'critic_loss': critic_loss.item(),
+        }
+        return results
 
     def learn_critic(
         self,
@@ -314,27 +323,27 @@ class ComaAgent(BaseAgent):
         """
         # Optimise critic
         with torch.no_grad():
-            target_q_vals = self.target_critic_model(obs_episode)
+            target_q_vals = self.target_critic_model(obs_episode).squeeze(3)
 
         targets_taken = torch.gather(target_q_vals,
-                                     dim=3,
-                                     index=actions_episode).squeeze(3)
+                                     dim=2,
+                                     index=actions_episode)
 
         # Calculate n-step returns
-        targets = self.nstep_returns(rewards_episode, mask_episode,
-                                     targets_taken, self.nstep_return)
-
-        q_vals = self.critic_model(obs_episode)[:, :-1]
-        q_taken = torch.gather(q_vals, dim=3, index=actions_episode).squeeze(3)
+        # targets = self.nstep_returns(rewards_episode, targets_taken,
+        #                              mask_episode, self.nstep_return)
+        targets = targets_taken
+        q_vals = self.critic_model(obs_episode).squeeze(3)
+        q_taken = torch.gather(q_vals, dim=2, index=actions_episode)
         td_error = q_taken - targets.detach()
         masked_td_error = td_error * mask_episode
         critic_loss = (masked_td_error**2).sum() / mask_episode.sum()
-        self.critic_optimiser.zero_grad()
+        self.critic_optimizer.zero_grad()
         critic_loss.backward()
         if self.clip_grad_norm:
             torch.nn.utils.clip_grad_norm_(self.critic_params,
                                            self.clip_grad_norm)
-        self.critic_optimiser.step()
+        self.critic_optimizer.step()
 
         return q_vals, critic_loss
 
@@ -363,36 +372,44 @@ class ComaAgent(BaseAgent):
         # Returns lambda-return from t=0 to t=T-1, i.e. in B*T-1*A
         return ret[:, 0:-1]
 
-    def nstep_returns(self, rewards, mask, values, nsteps) -> torch.Tensor:
+    def nstep_returns(
+        self,
+        rewards: torch.Tensor,
+        values: torch.Tensor,
+        mask: torch.Tensor,
+        nsteps: torch.Tensor,
+    ) -> torch.Tensor:
         """Calculate n-step returns.
 
         Args:
-            rewards (_type_): _description_
-            mask (_type_): _description_
-            values (_type_): _description_
-            nsteps (_type_): _description_
-
+            rewards (torch.Tensor): rewards tensor, in shape (batch_size, T, 1)
+            values (torch.Tensor): values tensor, in shape (batch_size, T, num_agents)
+            mask (torch.Tensor): mask tensor, in shape (batch_size, T, 1)
+            nsteps (int): n-step return
         Returns:
-            torch.Tensor: _description_
+            torch.Tensor: n-step returns, in shape (batch_size, T-1, num_agents)
         """
-        nstep_values = torch.zeros_like(values[:, :-1])
-        for t_start in range(rewards.size(1)):
-            nstep_return_t = torch.zeros_like(values[:, 0])
+        (batch_size, episode_len, num_agents) = values.shape
+        nstep_values = torch.zeros_like(values[:, :-1, :], dtype=values.dtype)
+        for t_start in range(episode_len):
+            nstep_return_t = torch.zeros_like()
             for step in range(nsteps + 1):
                 t = t_start + step
-                if t >= rewards.size(1):
+                if t >= episode_len:
                     break
                 elif step == nsteps:
-                    nstep_return_t += self.gamma**step * values[:, t] * mask[:,
+                    nstep_return_t += self.gamma**step * values[:,
+                                                                t, :] * mask[:,
                                                                              t]
-                elif t == rewards.size(1) - 1 and self.add_value_last_step:
+                elif t == episode_len - 1 and self.add_value_last_step:
                     nstep_return_t += self.gamma**step * rewards[:,
                                                                  t] * mask[:,
                                                                            t]
-                    nstep_return_t += self.gamma**(step + 1) * values[:, t + 1]
+                    nstep_return_t += self.gamma**(step + 1) * values[:,
+                                                                      t + 1, :]
                 else:
-                    nstep_return_t += self.gamma**(
-                        step) * rewards[:, t] * mask[:, t]
+                    nstep_return_t += (self.gamma**(step) * rewards[:, t, :] *
+                                       mask[:, t, :])
             nstep_values[:, t_start, :] = nstep_return_t
         return nstep_values
 
