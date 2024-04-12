@@ -61,7 +61,7 @@ def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):
     return episode_reward, episode_step, is_win, mean_loss, mean_td_loss, mean_opt_loss, mean_nopt_loss
 
 
-def run_evaluate_episode(env, agent, num_eval_episodes=5):
+def run_eval_episode(env, agent, num_eval_episodes=5):
     eval_is_win_buffer = []
     eval_reward_buffer = []
     eval_steps_buffer = []

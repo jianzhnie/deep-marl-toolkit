@@ -16,7 +16,7 @@ from marltoolkit.data import MaReplayBuffer
 from marltoolkit.envs import SC2EnvWrapper
 from marltoolkit.modules.actors import RNNModel
 from marltoolkit.modules.mixers.qtran_mixer import QTransModel
-from marltoolkit.runners.episode_runner import (run_evaluate_episode,
+from marltoolkit.runners.episode_runner import (run_eval_episode,
                                                 run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
@@ -147,7 +147,7 @@ def main():
             logger.log_train_data(train_results, steps_cnt)
 
         if episode_cnt % config['test_log_interval'] == 0:
-            eval_rewards, eval_steps, eval_win_rate = run_evaluate_episode(
+            eval_rewards, eval_steps, eval_win_rate = run_eval_episode(
                 env, qmix_agent, num_eval_episodes=5)
             text_logger.info(
                 '[Eval], episode: {}, eval_win_rate: {:.2f}, eval_rewards: {:.2f}'

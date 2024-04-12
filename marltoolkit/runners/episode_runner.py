@@ -6,6 +6,7 @@ import numpy as np
 from marltoolkit.agents.base_agent import BaseAgent
 from marltoolkit.data.ma_buffer import ReplayBuffer
 from marltoolkit.envs import MultiAgentEnv
+from marltoolkit.utils.logger.logs import avg_val_from_list_of_dicts
 
 
 def run_train_episode(
@@ -49,11 +50,12 @@ def run_train_episode(
             'dones': done,
             'filled': False,
         }
+
         rpm.store_transitions(transitions)
+        obs, state = next_obs, next_state
+
         episode_reward += reward
         episode_step += 1
-        state = next_state
-        obs = next_obs
 
     # fill the episode
     for _ in range(episode_step, args.episode_limit):
@@ -63,36 +65,35 @@ def run_train_episode(
     rpm.store_episodes()
     is_win = env.win_counted
 
-    mean_loss = []
-    mean_td_error = []
+    train_res_lst = []
     if rpm.size() > args.memory_warmup_size:
         for _ in range(args.update_learner_freq):
             batch = rpm.sample(args.batch_size)
-            loss, td_error = agent.learn(**batch)
-            mean_loss.append(loss)
-            mean_td_error.append(td_error)
+            results = agent.learn(batch)
+            train_res_lst.append(results)
 
-    mean_loss = np.mean(mean_loss) if mean_loss else None
-    mean_td_error = np.mean(mean_td_error) if mean_td_error else None
+    train_res_dict = avg_val_from_list_of_dicts(train_res_lst)
 
-    return episode_reward, episode_step, is_win, mean_loss, mean_td_error
+    train_res_dict['episode_reward'] = episode_reward
+    train_res_dict['episode_step'] = episode_step
+    train_res_dict['win_rate'] = is_win
+    return train_res_dict
 
 
-def run_evaluate_episode(
+def run_eval_episode(
     env: MultiAgentEnv,
     agent: BaseAgent,
     num_eval_episodes: int = 5,
     args: argparse.Namespace = None,
 ) -> Tuple[float, float, float]:
-    eval_is_win_buffer = []
-    eval_reward_buffer = []
-    eval_steps_buffer = []
+    eval_res_list = []
     for _ in range(num_eval_episodes):
         agent.init_hidden_states(batch_size=1)
         episode_reward = 0.0
         episode_step = 0
         done = False
         obs, state, info = env.reset()
+
         agents_id_onehot = env.get_agents_id_one_hot()
         if args.use_last_action:
             last_actions = np.zeros((args.num_agents, args.n_actions),
@@ -103,26 +104,27 @@ def run_evaluate_episode(
 
         while not done:
             available_actions = env.get_available_actions()
-            if args.use_last_action:
-                obs = np.concatenate([obs, last_actions], axis=-1)
-            if args.use_agent_id_onehot:
-                obs = np.concatenate([obs, agents_id_onehot], axis=-1)
-
             actions = agent.predict(obs, available_actions)
-            obs, state, reward, terminated, truncated, info = env.step(actions)
             last_actions = env.get_actions_one_hot(actions)
+            next_obs, next_state, reward, terminated, truncated, info = env.step(
+                actions)
+
+            if args.use_last_action:
+                next_obs = np.concatenate([next_obs, last_actions], axis=-1)
+            if args.use_agent_id_onehot:
+                next_obs = np.concatenate([next_obs, agents_id_onehot],
+                                          axis=-1)
+
             done = terminated or truncated
+            obs = next_obs
             episode_step += 1
             episode_reward += reward
 
         is_win = env.win_counted
-
-        eval_reward_buffer.append(episode_reward)
-        eval_steps_buffer.append(episode_step)
-        eval_is_win_buffer.append(is_win)
-
-    eval_rewards = np.mean(eval_reward_buffer)
-    eval_steps = np.mean(eval_steps_buffer)
-    eval_win_rate = np.mean(eval_is_win_buffer)
-
-    return eval_rewards, eval_steps, eval_win_rate
+        eval_res_list.append({
+            'episode_reward': episode_reward,
+            'episode_step': episode_step,
+            'win_rate': is_win,
+        })
+    eval_res_dict = avg_val_from_list_of_dicts(eval_res_list)
+    return eval_res_dict

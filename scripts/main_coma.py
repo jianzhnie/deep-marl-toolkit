@@ -7,16 +7,15 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append('../')
-from smac.env import StarCraft2Env
 
 from configs.arguments import get_common_args
 from configs.coma_config import ComaConfig
 from marltoolkit.agents.coma_agent import ComaAgent
 from marltoolkit.data import ReplayBuffer
-from marltoolkit.envs.smacv1.env_wrapper import SC2EnvWrapper
+from marltoolkit.envs.smacv1.smac_env import SMACWrapperEnv
 from marltoolkit.modules.actors import RNNActorModel
 from marltoolkit.modules.critics.coma import MLPCriticModel
-from marltoolkit.runners.episode_runner import (run_evaluate_episode,
+from marltoolkit.runners.episode_runner import (run_eval_episode,
                                                 run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
@@ -37,14 +36,17 @@ def main():
     device = (torch.device('cuda') if torch.cuda.is_available() and args.cuda
               else torch.device('cpu'))
 
-    env = StarCraft2Env(map_name=args.scenario, difficulty=args.difficulty)
-    env = SC2EnvWrapper(env)
-
+    env = SMACWrapperEnv(map_name=args.scenario, difficulty=args.difficulty)
     args.episode_limit = env.episode_limit
+    args.obs_dim = env.obs_dim
     args.obs_shape = env.obs_shape
+    args.state_dim = env.state_dim
     args.state_shape = env.state_shape
     args.num_agents = env.num_agents
     args.n_actions = env.n_actions
+    args.action_shape = env.action_shape
+    args.reward_shape = env.reward_shape
+    args.done_shape = env.done_shape
     args.device = device
 
     # init the logger before other steps
@@ -78,31 +80,35 @@ def main():
     rpm = ReplayBuffer(
         max_size=args.replay_buffer_size,
         num_agents=args.num_agents,
-        num_actions=args.n_actions,
         episode_limit=args.episode_limit,
-        obs_shape=args.obs_shape,
-        state_shape=args.state_shape,
-        device=args.device,
+        obs_space=args.obs_shape,
+        state_space=args.state_shape,
+        action_space=args.action_shape,
+        reward_space=args.reward_shape,
+        done_space=args.done_shape,
+        device=device,
     )
 
     actor_model = RNNActorModel(
-        input_dim=args.obs_shape,
+        input_dim=args.obs_dim,
         rnn_hidden_dim=args.rnn_hidden_dim,
         n_actions=args.n_actions,
     )
 
-    critic_model = MLPCriticModel(input_dim=args.obs_shape,
-                                  hidden_dim=args.hidden_dim,
-                                  output_dim=1)
-    marl_agent = ComaAgent(
+    critic_model = MLPCriticModel(
+        input_dim=args.obs_dim,
+        hidden_dim=args.fc_hidden_dim,
+        output_dim=args.n_actions,
+    )
+    agent = ComaAgent(
         actor_model=actor_model,
         critic_model=critic_model,
         num_agents=args.num_agents,
         double_q=args.double_q,
         total_steps=args.total_steps,
         gamma=args.gamma,
-        learning_rate=args.learning_rate,
-        min_learning_rate=args.min_learning_rate,
+        actor_lr=args.learning_rate,
+        critic_lr=args.learning_rate,
         exploration_start=args.exploration_start,
         min_exploration=args.min_exploration,
         update_target_interval=args.update_target_interval,
@@ -113,56 +119,54 @@ def main():
 
     progress_bar = ProgressBar(args.memory_warmup_size)
     while rpm.size() < args.memory_warmup_size:
-        run_train_episode(env, marl_agent, rpm, args)
+        run_train_episode(env, agent, rpm, args)
         progress_bar.update()
 
     steps_cnt = 0
     episode_cnt = 0
     progress_bar = ProgressBar(args.total_steps)
     while steps_cnt < args.total_steps:
-        episode_reward, episode_step, is_win, mean_loss, mean_td_error = (
-            run_train_episode(env, marl_agent, rpm, args))
+        train_res_dict = run_train_episode(env, agent, rpm, args)
         # update episodes and steps
         episode_cnt += 1
-        steps_cnt += episode_step
+        steps_cnt += train_res_dict['episode_step']
 
         # learning rate decay
-        marl_agent.learning_rate = max(
-            marl_agent.lr_scheduler.step(episode_step),
-            marl_agent.min_learning_rate)
+        agent.learning_rate = max(
+            agent.lr_scheduler.step(train_res_dict['episode_step']),
+            agent.min_learning_rate,
+        )
 
-        train_results = {
-            'env_step': episode_step,
-            'rewards': episode_reward,
-            'win_rate': is_win,
-            'mean_loss': mean_loss,
-            'mean_td_error': mean_td_error,
-            'exploration': marl_agent.exploration,
-            'learning_rate': marl_agent.learning_rate,
+        train_res_dict.update({
+            'exploration': agent.exploration,
+            'learning_rate': agent.learning_rate,
             'replay_max_size': rpm.size(),
-            'target_update_count': marl_agent.target_update_count,
-        }
+            'target_update_count': agent.target_update_count,
+        })
         if episode_cnt % args.train_log_interval == 0:
             text_logger.info(
-                '[Train], episode: {}, train_win_rate: {:.2f}, train_reward: {:.2f}'
-                .format(episode_cnt, is_win, episode_reward))
-            logger.log_train_data(train_results, steps_cnt)
+                '[Train], episode: {}, train_episode_step: {}, train_win_rate: {:.2f}, train_reward: {:.2f}'
+                .format(
+                    episode_cnt,
+                    train_res_dict['episode_step'],
+                    train_res_dict['win_rate'],
+                    train_res_dict['episode_reward'],
+                ))
+            logger.log_train_data(train_res_dict, steps_cnt)
 
         if episode_cnt % args.test_log_interval == 0:
-            eval_rewards, eval_steps, eval_win_rate = run_evaluate_episode(
-                env, marl_agent, num_eval_episodes=5)
+            eval_res_dict = run_eval_episode(env, agent, args=args)
             text_logger.info(
-                '[Eval], episode: {}, eval_win_rate: {:.2f}, eval_rewards: {:.2f}'
-                .format(episode_cnt, eval_win_rate, eval_rewards))
+                '[Eval], episode: {}, eval_episode_step:{:.2f}, eval_win_rate: {:.2f}, eval_reward: {:.2f}'
+                .format(
+                    episode_cnt,
+                    eval_res_dict['episode_step'],
+                    eval_res_dict['win_rate'],
+                    eval_res_dict['episode_reward'],
+                ))
+            logger.log_test_data(eval_res_dict, steps_cnt)
 
-            test_results = {
-                'env_step': eval_steps,
-                'rewards': eval_rewards,
-                'win_rate': eval_win_rate,
-            }
-            logger.log_test_data(test_results, steps_cnt)
-
-        progress_bar.update(episode_step)
+        progress_bar.update(train_res_dict['episode_step'])
 
 
 if __name__ == '__main__':

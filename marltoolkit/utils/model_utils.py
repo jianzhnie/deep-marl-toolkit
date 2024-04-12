@@ -13,7 +13,7 @@ def hard_target_update(src: nn.Module, tgt: nn.Module) -> None:
     tgt.load_state_dict(src.state_dict())
 
 
-def soft_target_update(src: nn.Module, tgt: nn.Module, tau=0.005) -> None:
+def soft_target_update(src: nn.Module, tgt: nn.Module, tau=0.05) -> None:
     """Soft update model parameters.
 
     θ_target = τ*θ_local + (1 - τ)*θ_target

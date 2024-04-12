@@ -25,28 +25,28 @@ class QMixConfig:
 
     def __init__(
         self,
-        mixing_embed_dim: int = 32,
         fc_hidden_dim: int = 64,
         rnn_hidden_dim: int = 64,
         gamma: float = 0.99,
         exploration_start: float = 1.0,
-        min_exploration: float = 0.1,
-        update_target_interval: int = 1000,
-        learning_rate: float = 0.0005,
+        min_exploration: float = 0.01,
+        update_target_interval: int = 100,
+        learning_rate: float = 0.1,
         min_learning_rate: float = 0.0001,
         clip_grad_norm: float = 10,
         hypernet_layers: int = 2,
         hypernet_embed_dim: int = 64,
-        update_learner_freq: int = 2,
+        mixing_embed_dim: int = 32,
+        update_learner_freq: int = 3,
         double_q: bool = True,
         algo_name: str = 'qmix',
     ) -> None:
         # Network architecture parameters
-        self.mixing_embed_dim = mixing_embed_dim
         self.fc_hidden_dim = fc_hidden_dim
         self.rnn_hidden_dim = rnn_hidden_dim
         self.hypernet_layers = hypernet_layers
         self.hypernet_embed_dim = hypernet_embed_dim
+        self.mixing_embed_dim = mixing_embed_dim
 
         # Training parameters
         self.gamma = gamma

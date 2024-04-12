@@ -51,10 +51,7 @@ class EpisodeData:
     def reset(self):
         self.episode_buffer = dict(
             obs=np.zeros(
-                (
-                    self.episode_limit,
-                    self.num_agents,
-                ) + self.obs_space,
+                (self.episode_limit, ) + self.obs_space,
                 dtype=np.float32,
             ),
             actions=np.zeros(
@@ -109,7 +106,7 @@ class EpisodeData:
             - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
-            - done (np.ndarray): Termination flag.
+            - dones (np.ndarray): Termination flag.
             - filled (np.ndarray): Filled flag.
         """
         assert self.size() < self.episode_limit
@@ -217,7 +214,6 @@ class ReplayBuffer:
                 (
                     self.max_size,
                     self.episode_limit,
-                    self.num_agents,
                 ) + self.obs_space,
                 dtype=np.float32,
             ),
@@ -291,10 +287,9 @@ class ReplayBuffer:
             - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
-            - done (np.ndarray): Termination flag.
+            - dones (np.ndarray): Termination flag.
             - filled (np.ndarray): Filled flag.
         """
-        assert self.size() < self.max_size
         if episode_buffer is None:
             episode_buffer = self.episode_data.episode_buffer
         for key in self.buffer_keys:
@@ -315,7 +310,7 @@ class ReplayBuffer:
             - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
-            - done (np.ndarray): Termination flag.
+            - dones (np.ndarray): Termination flag.
             - filled (np.ndarray): Filled flag.
         """
         self.episode_data.store_transitions(transitions)

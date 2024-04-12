@@ -43,13 +43,13 @@ def get_common_args():
     parser.add_argument(
         '--use_last_action',
         type=bool,
-        default=True,
+        default=False,
         help='whether to use the last action',
     )
     parser.add_argument(
         '--use_agent_id_onehot',
         type=bool,
-        default=True,
+        default=False,
         help='whether to use the agent id transform',
     )
     parser.add_argument('--seed', type=int, default=123, help='random seed')

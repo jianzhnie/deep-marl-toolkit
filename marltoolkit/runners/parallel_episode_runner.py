@@ -85,7 +85,7 @@ def run_train_episode(
     return episode_score, episode_step, mean_loss, mean_td_error
 
 
-def run_evaluate_episode(
+def run_eval_episode(
     env: BaseVecEnv,
     agent: BaseAgent,
     num_eval_episodes: int = 5,

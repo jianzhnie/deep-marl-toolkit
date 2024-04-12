@@ -10,9 +10,9 @@ class OnPolicyBuffer(BaseBuffer):
 
     Args:
         num_agents: number of agents.
+        obs_space: observation space, type: Discrete, Box.
         state_space: global state space, type: Discrete, Box.
-        obs_space: observation space for one agent (suppose same obs space for group agents).
-        action_space: action space for one agent (suppose same actions space for group agents).
+        action_space: action space, type: Discrete, MultiDiscrete, Box.
         reward_space: reward space.
         done_space: terminal variable space.
         num_envs: number of parallel environments.
@@ -34,8 +34,8 @@ class OnPolicyBuffer(BaseBuffer):
         reward_space: Union[int, Tuple],
         done_space: Union[int, Tuple],
         gamma: float = 0.99,
-        gae_lambda: float = 0.8,
         use_gae: bool = False,
+        gae_lambda: float = 0.8,
         use_advantage_norm: bool = False,
         device: str = 'cpu',
         **kwargs,
@@ -54,8 +54,8 @@ class OnPolicyBuffer(BaseBuffer):
         # Adjust buffer size
         self.max_size = max_size // self.num_envs
         self.gamma = gamma
-        self.gae_lambda = gae_lambda
         self.use_gae = use_gae
+        self.gae_lambda = gae_lambda
         self.use_advantage_norm = use_advantage_norm
         self.buffers = {}
         self.start_ids = None
@@ -70,14 +70,12 @@ class OnPolicyBuffer(BaseBuffer):
         self.buffers = {
             'obs':
             np.zeros(
-                (self.max_size, self.num_envs, self.num_agents) +
-                self.obs_space,
+                (self.max_size, self.num_envs) + self.obs_space,
                 dtype=np.float32,
             ),
             'actions':
             np.zeros(
-                (self.max_size, self.num_envs, self.num_agents) +
-                self.action_space,
+                (self.max_size, self.num_envs, self.num_agents),
                 dtype=np.float32,
             ),
             'rewards':
@@ -92,7 +90,7 @@ class OnPolicyBuffer(BaseBuffer):
             ),
             'values':
             np.zeros(
-                (self.num_envs, self.max_size, self.num_agents, 1),
+                (self.max_size, self.num_envs, self.num_agents, 1),
                 dtype=np.float32,
             ),
             'log_pi_old':
@@ -105,7 +103,7 @@ class OnPolicyBuffer(BaseBuffer):
                 (self.max_size, self.num_envs) + self.reward_space,
                 dtype=np.float32,
             ),
-            'terminals':
+            'dones':
             np.zeros((self.max_size, self.num_envs) + self.done_space,
                      dtype=np.bool_),
             'agent_mask':
@@ -121,17 +119,16 @@ class OnPolicyBuffer(BaseBuffer):
                 )
             })
         self.curr_ptr, self.curr_size = 0, 0
-        self.start_ids = np.zeros(
-            self.num_envs,
-            np.int64)  # the start index of the last episode for each env.
+        self.start_ids = np.zeros(self.num_envs, np.int64)
+        # the start index of the last episode for each env.
 
-    def store(self, step_data: Dict[str, np.array]):
+    def store(self, step_data: Dict[str, np.array]) -> None:
         step_data_keys = step_data.keys()
         for k in self.buffer_keys:
             if k == 'advantages':
                 continue
             if k in step_data_keys:
-                self.buffers[k][:, self.curr_ptr] = step_data[k]
+                self.buffers[k][self.curr_ptr] = step_data[k]
         self.curr_ptr = (self.curr_ptr + 1) % self.max_size
         self.curr_size = min(self.curr_size + 1, self.max_size)
 
@@ -149,12 +146,13 @@ class OnPolicyBuffer(BaseBuffer):
                                    self.curr_ptr).astype(np.int32)
 
         # calculate advantages and returns
-        rewards = np.array(self.buffers['rewards'][i_env, path_slice])
-        vs = np.append(np.array(self.buffers['values'][i_env, path_slice]),
-                       [value],
-                       axis=0)
-        dones = np.array(self.buffers['terminals'][i_env, path_slice])[:, :,
-                                                                       None]
+        rewards = np.array(self.buffers['rewards'][path_slice, i_env])
+        vs = np.append(
+            np.array(self.buffers['values'][path_slice, i_env]),
+            [value],
+            axis=0,
+        )
+        dones = np.array(self.buffers['dones'][path_slice, i_env])[:, :, None]
         returns = np.zeros_like(rewards)
         last_gae_lam = 0
         step_nums = len(path_slice)
@@ -185,17 +183,17 @@ class OnPolicyBuffer(BaseBuffer):
                           if use_value_norm else returns - vs)
             advantages = advantages[:-1]
 
-        self.buffers['returns'][i_env, path_slice] = returns
-        self.buffers['advantages'][i_env, path_slice] = advantages
+        self.buffers['returns'][path_slice, i_env] = returns
+        self.buffers['advantages'][path_slice, i_env] = advantages
         self.start_ids[i_env] = self.curr_ptr
 
-    def sample(self, indexes):
+    def sample(self, idx):
         assert (
             self.size() == self.max_size
         ), 'Not enough transitions for on-policy buffer to random sample'
 
         samples = {}
-        env_choices, step_choices = divmod(indexes, self.max_size)
+        env_choices, step_choices = divmod(idx, self.max_size)
         for k in self.buffer_keys:
             if k == 'advantages':
                 adv_batch = self.buffers[k][env_choices, step_choices]
