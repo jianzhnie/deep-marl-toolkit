@@ -15,7 +15,7 @@ from marltoolkit.data import ReplayBuffer
 from marltoolkit.envs.smacv1.smac_env import SMACWrapperEnv
 from marltoolkit.modules.actors import RNNActorModel
 from marltoolkit.modules.critics.coma import MLPCriticModel
-from marltoolkit.runners.episode_runner import (run_evaluate_episode,
+from marltoolkit.runners.episode_runner import (run_eval_episode,
                                                 run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
@@ -124,48 +124,47 @@ def main():
     episode_cnt = 0
     progress_bar = ProgressBar(args.total_steps)
     while steps_cnt < args.total_steps:
-        episode_reward, episode_step, is_win, mean_loss, mean_td_error = (
-            run_train_episode(env, agent, rpm, args))
+        train_res_dict = run_train_episode(env, agent, rpm, args)
         # update episodes and steps
         episode_cnt += 1
-        steps_cnt += episode_step
+        steps_cnt += train_res_dict['episode_step']
 
         # learning rate decay
-        agent.learning_rate = max(agent.lr_scheduler.step(episode_step),
-                                  agent.min_learning_rate)
+        agent.learning_rate = max(
+            agent.lr_scheduler.step(train_res_dict['episode_step']),
+            agent.min_learning_rate,
+        )
 
-        train_results = {
-            'env_step': episode_step,
-            'rewards': episode_reward,
-            'win_rate': is_win,
-            'mean_loss': mean_loss,
-            'mean_td_error': mean_td_error,
+        train_res_dict.update({
             'exploration': agent.exploration,
             'learning_rate': agent.learning_rate,
             'replay_max_size': rpm.size(),
             'target_update_count': agent.target_update_count,
-        }
+        })
         if episode_cnt % args.train_log_interval == 0:
             text_logger.info(
-                '[Train], episode: {}, train_win_rate: {:.2f}, train_reward: {:.2f}'
-                .format(episode_cnt, is_win, episode_reward))
-            logger.log_train_data(train_results, steps_cnt)
+                '[Train], episode: {}, train_episode_step: {}, train_win_rate: {:.2f}, train_reward: {:.2f}'
+                .format(
+                    episode_cnt,
+                    train_res_dict['episode_step'],
+                    train_res_dict['win_rate'],
+                    train_res_dict['episode_reward'],
+                ))
+            logger.log_train_data(train_res_dict, steps_cnt)
 
         if episode_cnt % args.test_log_interval == 0:
-            eval_rewards, eval_steps, eval_win_rate = run_evaluate_episode(
-                env, agent, args=args)
+            eval_res_dict = run_eval_episode(env, agent, args=args)
             text_logger.info(
-                '[Eval], episode: {}, eval_win_rate: {:.2f}, eval_rewards: {:.2f}'
-                .format(episode_cnt, eval_win_rate, eval_rewards))
+                '[Eval], episode: {}, eval_episode_step:{:.2f}, eval_win_rate: {:.2f}, eval_rewards: {:.2f}'
+                .format(
+                    episode_cnt,
+                    eval_res_dict['episode_step'],
+                    eval_res_dict['eval_win_rate'],
+                    eval_res_dict['eval_rewards'],
+                ))
+            logger.log_test_data(eval_res_dict, steps_cnt)
 
-            test_results = {
-                'env_step': eval_steps,
-                'rewards': eval_rewards,
-                'win_rate': eval_win_rate,
-            }
-            logger.log_test_data(test_results, steps_cnt)
-
-        progress_bar.update(episode_step)
+        progress_bar.update(train_res_dict['episode_step'])
 
 
 if __name__ == '__main__':
