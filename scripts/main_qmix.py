@@ -69,7 +69,8 @@ def main():
     """
     qmix_config = QMixConfig()
     common_args = get_common_args()
-    args = argparse.Namespace(**vars(common_args), **vars(qmix_config))
+    args = argparse.Namespace(**vars(qmix_config))
+    args.__dict__.update(**vars(common_args))
     device = torch.device('cuda') if torch.cuda.is_available(
     ) and args.cuda else torch.device('cpu')
 

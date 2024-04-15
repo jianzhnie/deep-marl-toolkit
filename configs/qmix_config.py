@@ -32,7 +32,7 @@ class QMixConfig:
         min_exploration: float = 0.01,
         update_target_interval: int = 100,
         learning_rate: float = 0.1,
-        min_learning_rate: float = 0.0001,
+        min_learning_rate: float = 0.00001,
         clip_grad_norm: float = 10,
         hypernet_layers: int = 2,
         hypernet_embed_dim: int = 64,

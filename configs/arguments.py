@@ -73,6 +73,14 @@ def get_common_args():
                         type=int,
                         default=32,
                         help='Training batch size.')
+    parser.add_argument('--learning_rate',
+                        type=float,
+                        default=0.001,
+                        help='Learning rate.')
+    parser.add_argument('--min_learning_rate',
+                        type=float,
+                        default=1e-6,
+                        help='Min learning rate.')
     parser.add_argument(
         '--log_dir',
         type=str,
