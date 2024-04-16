@@ -73,7 +73,7 @@ def run_train_episode(
     mean_loss = []
     mean_td_error = []
     if rpm.size() > args.memory_warmup_size:
-        for _ in range(args.update_learner_freq):
+        for _ in range(args.learner_update_freq):
             batch = rpm.sample_batch(args.batch_size)
             loss, td_error = agent.learn(**batch)
             mean_loss.append(loss)

@@ -35,11 +35,11 @@ class ACAgent(BaseAgent):
         entropy_coef: float = 0.01,
         learning_rate: float = 0.0005,
         min_learning_rate: float = 0.0001,
-        exploration_start: float = 1.0,
+        egreedy_exploration: float = 1.0,
         min_exploration: float = 0.01,
         add_value_last_step: bool = False,
-        update_target_interval: int = 100,
-        update_learner_freq: int = 1,
+        target_update_interval: int = 100,
+        learner_update_freq: int = 1,
         clip_grad_norm: float = 10,
         device: str = 'cpu',
     ):
@@ -57,12 +57,12 @@ class ACAgent(BaseAgent):
         self.min_learning_rate = min_learning_rate
         self.clip_grad_norm = clip_grad_norm
         self.global_steps = 0
-        self.exploration = exploration_start
+        self.exploration = egreedy_exploration
         self.min_exploration = min_exploration
         self.add_value_last_step = add_value_last_step
         self.target_update_count = 0
-        self.update_target_interval = update_target_interval
-        self.update_learner_freq = update_learner_freq
+        self.target_update_interval = target_update_interval
+        self.learner_update_freq = learner_update_freq
 
         self.device = device
         self.actor_model = actor_model
@@ -83,7 +83,7 @@ class ACAgent(BaseAgent):
         self.critic_optimiser = torch.optim.Adam(params=self.critic_params,
                                                  lr=learning_rate)
 
-        self.ep_scheduler = LinearDecayScheduler(exploration_start,
+        self.ep_scheduler = LinearDecayScheduler(egreedy_exploration,
                                                  total_steps * 0.8)
 
         lr_steps = [total_steps * 0.5, total_steps * 0.8]
@@ -164,7 +164,7 @@ class ACAgent(BaseAgent):
             mean_td_error (float): train TD error
         '''
         # update target model
-        if self.global_steps % self.update_target_interval == 0:
+        if self.global_steps % self.target_update_interval == 0:
             self.update_target()
             self.target_update_count += 1
 

@@ -67,7 +67,7 @@ def run_train_episode(
 
     train_res_lst = []
     if rpm.size() > args.memory_warmup_size:
-        for _ in range(args.update_learner_freq):
+        for _ in range(args.learner_update_freq):
             batch = rpm.sample(args.batch_size)
             results = agent.learn(batch)
             train_res_lst.append(results)
