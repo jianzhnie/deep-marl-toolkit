@@ -69,6 +69,18 @@ def get_common_args():
         default=32,
         help="Learning start until replay_buffer_size >= 'memory_warmup_size'",
     )
+    parser.add_argument(
+        '--target_update_tau',
+        type=float,
+        default=0.05,
+        help='Target model soft update coef.',
+    )
+    parser.add_argument(
+        '--target_update_interval',
+        type=int,
+        default=100,
+        help='Target model update interval.',
+    )
     parser.add_argument('--batch_size',
                         type=int,
                         default=32,
