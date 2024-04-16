@@ -36,16 +36,15 @@ class RNNActorModel(nn.Module):
 
     def forward(
         self,
-        inputs: torch.Tensor = None,
+        input: torch.Tensor = None,
         hidden_state: torch.Tensor = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-
-        out = F.relu(self.fc1(inputs), inplace=True)
+        out = F.relu(self.fc1(input), inplace=True)
         if hidden_state is not None:
             h_in = hidden_state.reshape(-1, self.rnn_hidden_dim)
         else:
             h_in = torch.zeros(out.shape[0],
-                               self.rnn_hidden_dim).to(inputs.device)
+                               self.rnn_hidden_dim).to(input.device)
 
         hidden_state = self.rnn(out, h_in)
         out = self.fc2(hidden_state)  # (batch_size, n_actions)
@@ -96,20 +95,19 @@ class MultiLayerRNNActorModel(nn.Module):
 
     def forward(
         self,
-        inputs: torch.Tensor = None,
+        input: torch.Tensor = None,
         hidden_state: torch.Tensor = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # input: (batch_size, episode_length, obs_dim)
-        out = F.relu(self.fc1(inputs), inplace=True)
+        out = F.relu(self.fc1(input), inplace=True)
         # out:  (batch_size, episode_length, fc_hidden_dim)
-        batch_size = inputs.shape[0]
+        batch_size = input.shape[0]
         if hidden_state is None:
             hidden_state = self.init_hidden(batch_size)
         else:
-            print(inputs.shape, hidden_state.shape)
             hidden_state = hidden_state.reshape(
                 self.rnn_num_layers, batch_size,
-                self.rnn_hidden_dim).to(inputs.device)
+                self.rnn_hidden_dim).to(input.device)
 
         out, hidden_state = self.rnn(out, hidden_state)
         # out: (batch_size, seq_len, rnn_hidden_dim)
