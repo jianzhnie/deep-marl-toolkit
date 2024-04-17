@@ -48,6 +48,15 @@ class SMACWrapperEnv(object):
         self.reward_shape = (self.reward_dim, )
         self.done_shape = (self.done_dim, )
 
+        # Multi-Agent Observation, State, and Action Shapes
+        self.obs_shapes = []
+        self.state_shapes = []
+        self.action_shapes = []
+        for agent_id in self.agents:
+            self.obs_shapes.append(self.obs_shape)
+            self.state_shapes.append(self.state_shape)
+            self.action_shapes.append(self.action_shape)
+
         # Space
         self.obs_space = Box(
             -np.inf,
@@ -62,12 +71,18 @@ class SMACWrapperEnv(object):
 
         # Multi-Agent Sapces
         self.obs_spaces: dict[AgentID, gym.spaces.Space] = {}
+        self.state_spaces: dict[AgentID, gym.spaces.Space] = {}
         self.action_spaces: dict[AgentID, gym.spaces.Space] = {}
         for agent_id in self.agents:
             self.obs_spaces[agent_id] = Box(
                 -np.inf,
                 np.inf,
                 shape=(self.obs_dim, ),
+            )
+            self.state_spaces[agent_id] = Box(
+                -np.inf,
+                np.inf,
+                shape=(self.state_dim, ),
             )
             self.action_spaces[agent_id] = Discrete(self.n_actions)
 
