@@ -17,11 +17,11 @@ class BaseBuffer(ABC):
         max_size: int,
         num_envs: int,
         num_agents: int,
-        obs_space: Union[int, Tuple],
-        state_space: Union[int, Tuple],
-        action_space: Union[int, Tuple],
-        reward_space: Union[int, Tuple],
-        done_space: Union[int, Tuple],
+        obs_shape: Union[int, Tuple],
+        state_shape: Union[int, Tuple],
+        action_shape: Union[int, Tuple],
+        reward_shape: Union[int, Tuple],
+        done_shape: Union[int, Tuple],
         device: Union[torch.device, str] = 'cpu',
         **kwargs,
     ):
@@ -30,11 +30,11 @@ class BaseBuffer(ABC):
         :param num_envs: Number of environments.
         :param max_size: Maximum capacity of the buffer.
         :param num_agents: Number of agents.
-        :param state_space: Dimensionality of the state space.
-        :param obs_space: Dimensionality of the observation space.
-        :param action_space: Dimensionality of the action space.
-        :param reward_space: Dimensionality of the reward space.
-        :param done_space: Dimensionality of the done space.
+        :param state_shape: Dimensionality of the state space.
+        :param obs_shape: Dimensionality of the observation space.
+        :param action_shape: Dimensionality of the action space.
+        :param reward_shape: Dimensionality of the reward space.
+        :param done_shape: Dimensionality of the done space.
         :param device: Device on which to store the buffer data.
         :param kwargs: Additional keyword arguments.
         """
@@ -42,11 +42,11 @@ class BaseBuffer(ABC):
         self.num_envs = num_envs
         self.max_size = max_size
         self.num_agents = num_agents
-        self.obs_space = obs_space
-        self.state_space = state_space
-        self.action_space = action_space
-        self.reward_space = reward_space
-        self.done_space = done_space
+        self.obs_shape = obs_shape
+        self.state_shape = state_shape
+        self.action_shape = action_shape
+        self.reward_shape = reward_shape
+        self.done_shape = done_shape
         self.device = device
         self.curr_ptr = 0
         self.curr_size = 0

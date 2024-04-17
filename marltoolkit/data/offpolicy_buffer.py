@@ -21,23 +21,23 @@ class MaEpisodeData(object):
         num_envs: int,
         num_agents: int,
         episode_limit: int,
-        obs_space: Union[int, Tuple],
-        state_space: Union[int, Tuple],
-        action_space: Union[int, Tuple],
-        reward_space: Union[int, Tuple],
-        done_space: Union[int, Tuple],
+        obs_shape: Union[int, Tuple],
+        state_shape: Union[int, Tuple],
+        action_shape: Union[int, Tuple],
+        reward_shape: Union[int, Tuple],
+        done_shape: Union[int, Tuple],
         **kwargs,
     ) -> None:
         self.num_envs = num_envs
         self.num_agents = num_agents
         self.episode_limit = episode_limit
-        self.obs_space = obs_space
-        self.state_space = state_space
-        self.action_space = action_space
-        self.reward_space = reward_space
-        self.done_space = done_space
+        self.obs_shape = obs_shape
+        self.state_shape = state_shape
+        self.action_shape = action_shape
+        self.reward_shape = reward_shape
+        self.done_shape = done_shape
 
-        if self.state_space is not None:
+        if self.state_shape is not None:
             self.store_global_state = True
         else:
             self.store_global_state = False
@@ -51,7 +51,7 @@ class MaEpisodeData(object):
     def reset(self):
         self.episode_buffer = dict(
             obs=np.zeros(
-                (self.episode_limit, self.num_envs) + self.obs_space,
+                (self.episode_limit, self.num_envs) + self.obs_shape,
                 dtype=np.float32,
             ),
             actions=np.zeros(
@@ -59,25 +59,25 @@ class MaEpisodeData(object):
                 dtype=np.int8,
             ),
             rewards=np.zeros(
-                (self.episode_limit, self.num_envs) + self.reward_space,
+                (self.episode_limit, self.num_envs) + self.reward_shape,
                 dtype=np.float32,
             ),
             dones=np.zeros(
-                (self.episode_limit, self.num_envs) + self.done_space,
+                (self.episode_limit, self.num_envs) + self.done_shape,
                 dtype=bool,
             ),
             filled=np.zeros(
-                (self.episode_limit, self.num_envs) + self.done_space,
+                (self.episode_limit, self.num_envs) + self.done_shape,
                 dtype=bool,
             ),
             available_actions=np.zeros(
-                (self.episode_limit, self.num_envs) + self.action_space,
+                (self.episode_limit, self.num_envs) + self.action_shape,
                 dtype=np.int8,
             ),
         )
         if self.store_global_state:
             self.episode_buffer['state'] = np.zeros(
-                (self.episode_limit, self.num_envs) + self.state_space,
+                (self.episode_limit, self.num_envs) + self.state_shape,
                 dtype=np.float32,
             )
 
@@ -112,11 +112,11 @@ class OffPolicyBuffer(BaseBuffer):
 
     Args:
         n_agents: number of agents.
-        state_space: global state shape, type: Discrete, Box.
-        obs_space: observation space for one agent (suppose same obs space for group agents).
-        action_space: action space for one agent (suppose same actions space for group agents).
-        reward_space: reward space.
-        done_space: terminal variable space.
+        state_shape: global state shape, type: Discrete, Box.
+        obs_shape: observation space for one agent (suppose same obs space for group agents).
+        action_shape: action space for one agent (suppose same actions space for group agents).
+        reward_shape: reward space.
+        done_shape: terminal variable space.
         num_envs: number of parallel environments.
         max_size: buffer size for one environment.
         **kwargs: other arguments.
@@ -127,11 +127,11 @@ class OffPolicyBuffer(BaseBuffer):
         max_size: int,
         num_envs: int,
         num_agents: int,
-        obs_space: Union[int, Tuple],
-        state_space: Union[int, Tuple],
-        action_space: Union[int, Tuple],
-        reward_space: Union[int, Tuple],
-        done_space: Union[int, Tuple],
+        obs_shape: Union[int, Tuple],
+        state_shape: Union[int, Tuple],
+        action_shape: Union[int, Tuple],
+        reward_shape: Union[int, Tuple],
+        done_shape: Union[int, Tuple],
         device: Union[torch.device, str] = 'cpu',
         **kwargs,
     ):
@@ -139,17 +139,17 @@ class OffPolicyBuffer(BaseBuffer):
             max_size,
             num_envs,
             num_agents,
-            obs_space,
-            state_space,
-            action_space,
-            reward_space,
-            done_space,
+            obs_shape,
+            state_shape,
+            action_shape,
+            reward_shape,
+            done_shape,
             device,
         )
 
         # Adjust buffer size
         self.max_size = max(max_size // num_envs, 1)
-        if self.state_space is not None:
+        if self.state_shape is not None:
             self.store_global_state = True
         else:
             self.store_global_state = False
@@ -182,15 +182,15 @@ class OffPolicyBuffer(BaseBuffer):
     def reset(self) -> None:
         self.buffers = dict(
             obs=np.zeros(
-                (self.max_size, self.num_envs) + self.obs_space,
+                (self.max_size, self.num_envs) + self.obs_shape,
                 dtype=np.float32,
             ),
             next_obs=np.zeros(
-                (self.max_size, self.num_envs) + self.obs_space,
+                (self.max_size, self.num_envs) + self.obs_shape,
                 dtype=np.float32,
             ),
             actions=np.zeros(
-                (self.max_size, self.num_envs) + self.action_space,
+                (self.max_size, self.num_envs) + self.action_shape,
                 dtype=np.int8,
             ),
             agent_mask=np.zeros(
@@ -202,16 +202,16 @@ class OffPolicyBuffer(BaseBuffer):
                 dtype=bool,
             ),
             rewards=np.zeros(
-                (self.max_size, self.num_envs) + self.reward_space,
+                (self.max_size, self.num_envs) + self.reward_shape,
                 dtype=np.float32),
             dones=np.zeros(
-                (self.max_size, self.num_envs) + self.done_space,
+                (self.max_size, self.num_envs) + self.done_shape,
                 dtype=np.bool_,
             ),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
-                (self.num_envs, self.max_size) + self.state_space,
+                (self.num_envs, self.max_size) + self.state_shape,
                 dtype=np.float32)
 
     def store(self, step_data: Dict[str, np.ndarray]) -> None:
@@ -252,11 +252,11 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
 
     Args:
         n_agents: number of agents.
-        state_space: global  state shape, type: Discrete, Box.
-        obs_space: observation space for one agent (suppose same obs space for group agents).
-        action_space: action space for one agent (suppose same actions space for group agents).
-        reward_space: reward space.
-        done_space: terminal variable space.
+        state_shape: global  state shape, type: Discrete, Box.
+        obs_shape: observation space for one agent (suppose same obs space for group agents).
+        action_shape: action space for one agent (suppose same actions space for group agents).
+        reward_shape: reward space.
+        done_shape: terminal variable space.
         num_envs: number of parallel environments.
         max_size: buffer size for one environment.
         **kwargs: other arguments.
@@ -268,11 +268,11 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
         num_envs: int,
         num_agents: int,
         episode_limit: int,
-        obs_space: Union[int, Tuple],
-        state_space: Union[int, Tuple],
-        action_space: Union[int, Tuple],
-        reward_space: Union[int, Tuple],
-        done_space: Union[int, Tuple],
+        obs_shape: Union[int, Tuple],
+        state_shape: Union[int, Tuple],
+        action_shape: Union[int, Tuple],
+        reward_shape: Union[int, Tuple],
+        done_shape: Union[int, Tuple],
         device: Union[torch.device, str] = 'cpu',
         **kwargs,
     ):
@@ -281,22 +281,29 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
             max_size,
             num_envs,
             num_agents,
-            obs_space,
-            state_space,
-            action_space,
-            reward_space,
-            done_space,
+            obs_shape,
+            state_shape,
+            action_shape,
+            reward_shape,
+            done_shape,
             device=device,
         )
-        self.episode_data = MaEpisodeData(num_envs, num_agents, episode_limit,
-                                          obs_space, state_space, action_space,
-                                          reward_space, done_space)
+        self.episode_data = MaEpisodeData(
+            num_envs,
+            num_agents,
+            episode_limit,
+            obs_shape,
+            state_shape,
+            action_shape,
+            reward_shape,
+            done_shape,
+        )
 
     def reset(self):
         self.buffers = dict(
             obs=np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.obs_space,
+                self.obs_shape,
                 dtype=np.float32,
             ),
             actions=np.zeros(
@@ -306,29 +313,29 @@ class OffPolicyBufferRNN(OffPolicyBuffer):
             ),
             rewards=np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.reward_space,
+                self.reward_shape,
                 dtype=np.float32,
             ),
             dones=np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.done_space,
+                self.done_shape,
                 dtype=np.bool_,
             ),
             filled=np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.done_space,
+                self.done_shape,
                 dtype=np.bool_,
             ),
             available_actions=np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.action_space,
+                self.action_shape,
                 dtype=np.int8,
             ),
         )
         if self.store_global_state:
             self.buffers['state'] = np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.state_space,
+                self.state_shape,
                 dtype=np.float32,
             )
 

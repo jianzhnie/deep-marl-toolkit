@@ -10,11 +10,11 @@ class OnPolicyBuffer(BaseBuffer):
 
     Args:
         num_agents: number of agents.
-        obs_space: observation space, type: Discrete, Box.
-        state_space: global state space, type: Discrete, Box.
-        action_space: action space, type: Discrete, MultiDiscrete, Box.
-        reward_space: reward space.
-        done_space: terminal variable space.
+        obs_shape: observation space, type: Discrete, Box.
+        state_shape: global state space, type: Discrete, Box.
+        action_shape: action space, type: Discrete, MultiDiscrete, Box.
+        reward_shape: reward space.
+        done_shape: terminal variable space.
         num_envs: number of parallel environments.
         max_size: buffer size of transition data for one environment.
         use_gae: whether to use GAE trick.
@@ -28,11 +28,11 @@ class OnPolicyBuffer(BaseBuffer):
         max_size: int,
         num_envs: int,
         num_agents: int,
-        obs_space: Union[int, Tuple],
-        state_space: Union[int, Tuple],
-        action_space: Union[int, Tuple],
-        reward_space: Union[int, Tuple],
-        done_space: Union[int, Tuple],
+        obs_shape: Union[int, Tuple],
+        state_shape: Union[int, Tuple],
+        action_shape: Union[int, Tuple],
+        reward_shape: Union[int, Tuple],
+        done_shape: Union[int, Tuple],
         gamma: float = 0.99,
         use_gae: bool = False,
         gae_lambda: float = 0.8,
@@ -44,11 +44,11 @@ class OnPolicyBuffer(BaseBuffer):
             max_size,
             num_envs,
             num_agents,
-            obs_space,
-            state_space,
-            action_space,
-            reward_space,
-            done_space,
+            obs_shape,
+            state_shape,
+            action_shape,
+            reward_shape,
+            done_shape,
             device,
         )
         # Adjust buffer size
@@ -70,7 +70,7 @@ class OnPolicyBuffer(BaseBuffer):
         self.buffers = {
             'obs':
             np.zeros(
-                (self.max_size, self.num_envs) + self.obs_space,
+                (self.max_size, self.num_envs) + self.obs_shape,
                 dtype=np.float32,
             ),
             'actions':
@@ -80,12 +80,12 @@ class OnPolicyBuffer(BaseBuffer):
             ),
             'rewards':
             np.zeros(
-                (self.max_size, self.num_envs) + self.reward_space,
+                (self.max_size, self.num_envs) + self.reward_shape,
                 dtype=np.float32,
             ),
             'returns':
             np.zeros(
-                (self.max_size, self.num_envs) + self.reward_space,
+                (self.max_size, self.num_envs) + self.reward_shape,
                 dtype=np.float32,
             ),
             'values':
@@ -100,21 +100,21 @@ class OnPolicyBuffer(BaseBuffer):
             ),
             'advantages':
             np.zeros(
-                (self.max_size, self.num_envs) + self.reward_space,
+                (self.max_size, self.num_envs) + self.reward_shape,
                 dtype=np.float32,
             ),
             'dones':
-            np.zeros((self.max_size, self.num_envs) + self.done_space,
+            np.zeros((self.max_size, self.num_envs) + self.done_shape,
                      dtype=np.bool_),
             'agent_mask':
             np.ones((self.max_size, self.num_envs, self.num_agents),
                     dtype=np.bool_),
         }
-        if self.state_space is not None:
+        if self.state_shape is not None:
             self.buffers.update({
                 'state':
                 np.zeros(
-                    (self.max_size, self.num_envs) + self.state_space,
+                    (self.max_size, self.num_envs) + self.state_shape,
                     dtype=np.float32,
                 )
             })
@@ -214,11 +214,11 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
         max_size: int,
         num_envs: int,
         num_agents: int,
-        obs_space: Union[int, Tuple],
-        state_space: Union[int, Tuple],
-        action_space: Union[int, Tuple],
-        reward_space: Union[int, Tuple],
-        done_space: Union[int, Tuple],
+        obs_shape: Union[int, Tuple],
+        state_shape: Union[int, Tuple],
+        action_shape: Union[int, Tuple],
+        reward_shape: Union[int, Tuple],
+        done_shape: Union[int, Tuple],
         gamma: float = 0.99,
         use_gae: bool = False,
         gae_lambda: float = 0.8,
@@ -230,11 +230,11 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
             max_size,
             num_envs,
             num_agents,
-            obs_space,
-            state_space,
-            action_space,
-            reward_space,
-            done_space,
+            obs_shape,
+            state_shape,
+            action_shape,
+            reward_shape,
+            done_shape,
             device,
         )
         self.episode_limit = kwargs.get('episode_length', None)
@@ -250,7 +250,7 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
             'obs':
             np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.obs_space,
+                self.obs_shape,
                 np.float32,
             ),
             'actions':
@@ -262,58 +262,58 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
             'rewards':
             np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.reward_space,
+                self.reward_shape,
                 np.float32,
             ),
             'returns':
             np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.reward_space,
+                self.reward_shape,
                 np.float32,
             ),
             'values':
             np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.reward_space,
+                self.reward_shape,
                 np.float32,
             ),
             'advantages':
             np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.reward_space,
+                self.reward_shape,
                 np.float32,
             ),
             'log_pi_old':
             np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.reward_space,
+                self.reward_shape,
                 np.float32,
             ),
             'dones':
             np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.done_space,
+                self.done_shape,
                 np.bool_,
             ),
             'avail_actions':
             np.ones(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.action_space,
+                self.action_shape,
                 np.bool_,
             ),
             'filled':
             np.zeros(
                 (self.max_size, self.episode_limit, self.num_envs) +
-                self.done_space,
+                self.done_shape,
                 np.bool_,
             ),
         }
-        if self.state_space is not None:
+        if self.state_shape is not None:
             self.buffers.update({
                 'state':
                 np.zeros(
                     (self.max_size, self.episode_limit, self.num_envs) +
-                    self.state_space,
+                    self.state_shape,
                     np.float32,
                 )
             })
@@ -322,7 +322,7 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
         self.episode_data = {
             'obs':
             np.zeros(
-                (self.episode_limit, self.num_envs) + self.obs_space,
+                (self.episode_limit, self.num_envs) + self.obs_shape,
                 dtype=np.float32,
             ),
             'actions':
@@ -332,24 +332,24 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
             ),
             'rewards':
             np.zeros(
-                (self.episode_limit, self.num_envs) + self.reward_space,
+                (self.episode_limit, self.num_envs) + self.reward_shape,
                 dtype=np.float32,
             ),
             'returns':
             np.zeros(
-                (self.episode_limit, self.num_envs) + self.reward_space,
+                (self.episode_limit, self.num_envs) + self.reward_shape,
                 np.float32,
             ),
             'values':
             np.zeros(
                 (self.episode_limit, self.num_envs, self.num_agents) +
-                self.reward_space,
+                self.reward_shape,
                 np.float32,
             ),
             'advantages':
             np.zeros(
                 (self.episode_limit, self.num_envs, self.num_agents) +
-                self.reward_space,
+                self.reward_shape,
                 np.float32,
             ),
             'log_pi_old':
@@ -359,22 +359,22 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
             ),
             'dones':
             np.zeros(
-                (self.episode_limit, self.num_envs) + self.done_space,
+                (self.episode_limit, self.num_envs) + self.done_shape,
                 dtype=np.bool_,
             ),
             'available_actions':
             np.ones(
-                (self.episode_limit, self.num_envs) + self.action_space,
+                (self.episode_limit, self.num_envs) + self.action_shape,
                 dtype=np.bool_,
             ),
             'filled':
             np.zeros((self.episode_limit, self.num_envs, 1), dtype=np.bool_),
         }
-        if self.state_space is not None:
+        if self.state_shape is not None:
             self.episode_data.update({
                 'state':
                 np.zeros(
-                    (self.episode_limit, self.num_envs) + self.state_space,
+                    (self.episode_limit, self.num_envs) + self.state_shape,
                     dtype=np.float32,
                 ),
             })
@@ -388,7 +388,7 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
         self.episode_data['log_pi_old'] = actions_dict['log_pi']
         self.episode_data['terminals'] = terminated
         self.episode_data['avail_actions'] = avail_actions
-        if self.state_space is not None:
+        if self.state_shape is not None:
             self.episode_data['state'] = state
 
     def store_episodes(self) -> None:
