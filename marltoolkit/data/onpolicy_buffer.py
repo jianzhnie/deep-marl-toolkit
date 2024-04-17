@@ -16,7 +16,7 @@ class OnPolicyBuffer(BaseBuffer):
         reward_space: reward space.
         done_space: terminal variable space.
         num_envs: number of parallel environments.
-        buffer_size: buffer size of transition data for one environment.
+        max_size: buffer size of transition data for one environment.
         use_gae: whether to use GAE trick.
         use_advnorm: whether to use Advantage normalization trick.
         gamma: discount factor.
@@ -134,25 +134,26 @@ class OnPolicyBuffer(BaseBuffer):
 
     def finish_path(self,
                     value,
-                    i_env,
+                    env_idx,
                     value_normalizer=None):  # when an episode is finished
         if self.curr_size == 0:
             return
         if self.size() == self.max_size:
-            path_slice = np.arange(self.start_ids[i_env],
+            path_slice = np.arange(self.start_ids[env_idx],
                                    self.max_size).astype(np.int32)
         else:
-            path_slice = np.arange(self.start_ids[i_env],
+            path_slice = np.arange(self.start_ids[env_idx],
                                    self.curr_ptr).astype(np.int32)
 
         # calculate advantages and returns
-        rewards = np.array(self.buffers['rewards'][path_slice, i_env])
+        rewards = np.array(self.buffers['rewards'][path_slice, env_idx])
         vs = np.append(
-            np.array(self.buffers['values'][path_slice, i_env]),
+            np.array(self.buffers['values'][path_slice, env_idx]),
             [value],
             axis=0,
         )
-        dones = np.array(self.buffers['dones'][path_slice, i_env])[:, :, None]
+        dones = np.array(self.buffers['dones'][path_slice, env_idx])[:, :,
+                                                                     None]
         returns = np.zeros_like(rewards)
         last_gae_lam = 0
         step_nums = len(path_slice)
@@ -183,9 +184,9 @@ class OnPolicyBuffer(BaseBuffer):
                           if use_value_norm else returns - vs)
             advantages = advantages[:-1]
 
-        self.buffers['returns'][path_slice, i_env] = returns
-        self.buffers['advantages'][path_slice, i_env] = advantages
-        self.start_ids[i_env] = self.curr_ptr
+        self.buffers['returns'][path_slice, env_idx] = returns
+        self.buffers['advantages'][path_slice, env_idx] = advantages
+        self.start_ids[env_idx] = self.curr_ptr
 
     def sample(self, idx):
         assert (
@@ -193,14 +194,234 @@ class OnPolicyBuffer(BaseBuffer):
         ), 'Not enough transitions for on-policy buffer to random sample'
 
         samples = {}
-        env_choices, step_choices = divmod(idx, self.max_size)
+        env_choices, step_choices = divmod(self.max_size, idx)
         for k in self.buffer_keys:
             if k == 'advantages':
-                adv_batch = self.buffers[k][env_choices, step_choices]
+                adv_batch = self.buffers[k][step_choices, env_choices]
                 if self.use_advantage_norm:
                     adv_batch = (adv_batch - np.mean(adv_batch)) / (
                         np.std(adv_batch) + 1e-8)
                 samples[k] = adv_batch
             else:
-                samples[k] = self.buffers[k][env_choices, step_choices]
+                samples[k] = self.buffers[k][step_choices, env_choices]
+        return samples
+
+
+class OnPolicyBufferRNN(OnPolicyBuffer):
+
+    def __init__(
+        self,
+        max_size: int,
+        num_envs: int,
+        num_agents: int,
+        obs_space: Union[int, Tuple],
+        state_space: Union[int, Tuple],
+        action_space: Union[int, Tuple],
+        reward_space: Union[int, Tuple],
+        done_space: Union[int, Tuple],
+        gamma: float = 0.99,
+        use_gae: bool = False,
+        gae_lambda: float = 0.8,
+        use_advantage_norm: bool = False,
+        device: str = 'cpu',
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            max_size,
+            num_envs,
+            num_agents,
+            obs_space,
+            state_space,
+            action_space,
+            reward_space,
+            done_space,
+            device,
+        )
+        self.episode_limit = kwargs.get('episode_length', None)
+        self.reset_episode()
+        self.episode_keys = self.episode_data.keys()
+
+        # memory management
+        self.curr_ptr = 0
+        self.curr_size = 0
+
+    def reset(self) -> None:
+        self.buffers = {
+            'obs':
+            np.zeros(
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.obs_space,
+                np.float32,
+            ),
+            'actions':
+            np.zeros(
+                (self.max_size, self.episode_limit, self.num_envs,
+                 self.num_agents),
+                np.float32,
+            ),
+            'rewards':
+            np.zeros(
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.reward_space,
+                np.float32,
+            ),
+            'returns':
+            np.zeros(
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.reward_space,
+                np.float32,
+            ),
+            'values':
+            np.zeros(
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.reward_space,
+                np.float32,
+            ),
+            'advantages':
+            np.zeros(
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.reward_space,
+                np.float32,
+            ),
+            'log_pi_old':
+            np.zeros(
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.reward_space,
+                np.float32,
+            ),
+            'dones':
+            np.zeros(
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.done_space,
+                np.bool_,
+            ),
+            'avail_actions':
+            np.ones(
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.action_space,
+                np.bool_,
+            ),
+            'filled':
+            np.zeros(
+                (self.max_size, self.episode_limit, self.num_envs) +
+                self.done_space,
+                np.bool_,
+            ),
+        }
+        if self.state_space is not None:
+            self.buffers.update({
+                'state':
+                np.zeros(
+                    (self.max_size, self.episode_limit, self.num_envs) +
+                    self.state_space,
+                    np.float32,
+                )
+            })
+
+    def reset_episode(self) -> None:
+        self.episode_data = {
+            'obs':
+            np.zeros(
+                (self.episode_limit, self.num_envs) + self.obs_space,
+                dtype=np.float32,
+            ),
+            'actions':
+            np.zeros(
+                (self.episode_limit, self.num_envs, self.num_agents),
+                dtype=np.float32,
+            ),
+            'rewards':
+            np.zeros(
+                (self.episode_limit, self.num_envs) + self.reward_space,
+                dtype=np.float32,
+            ),
+            'returns':
+            np.zeros(
+                (self.episode_limit, self.num_envs) + self.reward_space,
+                np.float32,
+            ),
+            'values':
+            np.zeros(
+                (self.episode_limit, self.num_envs, self.num_agents) +
+                self.reward_space,
+                np.float32,
+            ),
+            'advantages':
+            np.zeros(
+                (self.episode_limit, self.num_envs, self.num_agents) +
+                self.reward_space,
+                np.float32,
+            ),
+            'log_pi_old':
+            np.zeros(
+                (self.episode_limit, self.num_envs, self.num_agents),
+                np.float32,
+            ),
+            'dones':
+            np.zeros(
+                (self.episode_limit, self.num_envs) + self.done_space,
+                dtype=np.bool_,
+            ),
+            'available_actions':
+            np.ones(
+                (self.episode_limit, self.num_envs) + self.action_space,
+                dtype=np.bool_,
+            ),
+            'filled':
+            np.zeros((self.episode_limit, self.num_envs, 1), dtype=np.bool_),
+        }
+        if self.state_space is not None:
+            self.episode_data.update({
+                'state':
+                np.zeros(
+                    (self.episode_limit, self.num_envs) + self.state_space,
+                    dtype=np.float32,
+                ),
+            })
+
+    def store_transitions(self, transition_data):
+        obs_n, actions_dict, state, rewards, terminated, avail_actions = transition_data
+        self.episode_data['obs'] = obs_n
+        self.episode_data['actions'] = actions_dict['actions']
+        self.episode_data['rewards'] = rewards
+        self.episode_data['values'] = actions_dict['values']
+        self.episode_data['log_pi_old'] = actions_dict['log_pi']
+        self.episode_data['terminals'] = terminated
+        self.episode_data['avail_actions'] = avail_actions
+        if self.state_space is not None:
+            self.episode_data['state'] = state
+
+    def store_episodes(self) -> None:
+        episode_data_keys = self.episode_data.keys()
+        for env_idx in range(self.num_envs):
+            for k in self.buffer_keys:
+                if k in episode_data_keys:
+                    self.buffers[k][
+                        self.curr_ptr] = self.episode_data[k][env_idx].copy()
+            self.curr_ptr = (self.curr_ptr + 1) % self.max_size
+            self.curr_size = min(self.curr_size + 1, self.max_size)
+        self.reset_episode()
+
+    def sample(self, indexes):
+        assert (
+            self.size() == self.max_size
+        ), 'Not enough transitions for on-policy buffer to random sample'
+        samples = {}
+        filled_batch = self.buffers['filled'][indexes]
+        samples['filled'] = filled_batch
+        for k in self.buffer_keys:
+            if k == 'filled':
+                continue
+            if k == 'advantages':
+                adv_batch = self.buffers[k][indexes]
+                if self.use_advantage_norm:
+                    adv_batch_copy = adv_batch.copy()
+                    filled_batch_n = filled_batch[:, None, :, :].repeat(
+                        self.num_agents, axis=1)
+                    adv_batch_copy[filled_batch_n == 0] = np.nan
+                    adv_batch = (adv_batch - np.nanmean(adv_batch_copy)) / (
+                        np.nanstd(adv_batch_copy) + 1e-8)
+                samples[k] = adv_batch
+            else:
+                samples[k] = self.buffers[k][indexes]
         return samples
