@@ -10,6 +10,18 @@ class BaseBuffer(ABC):
 
     This class provides a basic structure for reinforcement learning experience
     replay buffers.
+
+    Args:
+        :param max_size: Maximum capacity of the buffer.
+        :param num_envs: Number of environments.
+        :param num_agents: Number of agents.
+        :param obs_shape: Dimensionality of the observation space.
+        :param state_shape: Dimensionality of the state space.
+        :param action_shape: Dimensionality of the action space.
+        :param reward_shape: Dimensionality of the reward space.
+        :param done_shape: Dimensionality of the done space.
+        :param device: Device on which to store the buffer data.
+        :param kwargs: Additional keyword arguments.
     """
 
     def __init__(
@@ -24,20 +36,7 @@ class BaseBuffer(ABC):
         done_shape: Union[int, Tuple],
         device: Union[torch.device, str] = 'cpu',
         **kwargs,
-    ):
-        """Initialize the base buffer.
-
-        :param num_envs: Number of environments.
-        :param max_size: Maximum capacity of the buffer.
-        :param num_agents: Number of agents.
-        :param state_shape: Dimensionality of the state space.
-        :param obs_shape: Dimensionality of the observation space.
-        :param action_shape: Dimensionality of the action space.
-        :param reward_shape: Dimensionality of the reward space.
-        :param done_shape: Dimensionality of the done space.
-        :param device: Device on which to store the buffer data.
-        :param kwargs: Additional keyword arguments.
-        """
+    ) -> None:
         super().__init__()
         self.num_envs = num_envs
         self.max_size = max_size
@@ -61,6 +60,7 @@ class BaseBuffer(ABC):
         """Add elements to the buffer."""
         raise NotImplementedError
 
+    @abstractmethod
     def extend(self, *args, **kwargs) -> None:
         """Add a new batch of transitions to the buffer."""
         for data in zip(*args):

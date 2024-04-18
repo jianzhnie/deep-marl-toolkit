@@ -9,18 +9,18 @@ class OnPolicyBuffer(BaseBuffer):
     """Replay buffer for on-policy MARL algorithms.
 
     Args:
+        max_size: buffer size of transition data for one environment.
+        num_envs: number of parallel environments.
         num_agents: number of agents.
         obs_shape: observation space, type: Discrete, Box.
         state_shape: global state space, type: Discrete, Box.
         action_shape: action space, type: Discrete, MultiDiscrete, Box.
         reward_shape: reward space.
         done_shape: terminal variable space.
-        num_envs: number of parallel environments.
-        max_size: buffer size of transition data for one environment.
-        use_gae: whether to use GAE trick.
-        use_advnorm: whether to use Advantage normalization trick.
         gamma: discount factor.
-        gae_lam: gae lambda.
+        use_gae: whether to use GAE trick.
+        gae_lambda: gae lambda.
+        use_advantage_norm: whether to use Advantage normalization trick.
     """
 
     def __init__(
@@ -40,7 +40,7 @@ class OnPolicyBuffer(BaseBuffer):
         device: str = 'cpu',
         **kwargs,
     ) -> None:
-        super().__init__(
+        super(OnPolicyBuffer, self).__init__(
             max_size,
             num_envs,
             num_agents,
@@ -123,6 +123,11 @@ class OnPolicyBuffer(BaseBuffer):
         # the start index of the last episode for each env.
 
     def store(self, step_data: Dict[str, np.array]) -> None:
+        """Store step data in the buffer.
+
+        Args:
+            step_data (Dict[str, np.array]): step data, including obs, actions, rewards, values, dones, etc.
+        """
         step_data_keys = step_data.keys()
         for k in self.buffer_keys:
             if k == 'advantages':
@@ -132,10 +137,13 @@ class OnPolicyBuffer(BaseBuffer):
         self.curr_ptr = (self.curr_ptr + 1) % self.max_size
         self.curr_size = min(self.curr_size + 1, self.max_size)
 
-    def finish_path(self,
-                    value,
-                    env_idx,
-                    value_normalizer=None):  # when an episode is finished
+    def finish_path(
+        self,
+        value: np.array,
+        env_idx: int,
+        value_normalizer=None,
+    ) -> None:
+        # when an episode is finished
         if self.curr_size == 0:
             return
         if self.size() == self.max_size:
@@ -157,38 +165,26 @@ class OnPolicyBuffer(BaseBuffer):
         returns = np.zeros_like(rewards)
         last_gae_lam = 0
         step_nums = len(path_slice)
-        use_value_norm = False if (value_normalizer is None) else True
 
         if self.use_gae:
             for t in reversed(range(step_nums)):
-                if use_value_norm:
-                    vs_t, vs_next = (
-                        value_normalizer.denormalize(vs[t]),
-                        value_normalizer.denormalize(vs[t + 1]),
-                    )
-                else:
-                    vs_t, vs_next = vs[t], vs[t + 1]
-                delta = rewards[t] + (1 -
-                                      dones[t]) * self.gamma * vs_next - vs_t
+                delta = rewards[t] + (
+                    1 - dones[t]) * self.gamma * vs[t + 1] - vs[t]
                 last_gae_lam = (delta + (1 - dones[t]) * self.gamma *
                                 self.gae_lambda * last_gae_lam)
-                returns[t] = last_gae_lam + vs_t
-            advantages = (returns - value_normalizer.denormalize(vs[:-1])
-                          if use_value_norm else returns - vs[:-1])
+                returns[t] = last_gae_lam + vs[t]
         else:
             returns = np.append(returns, [value], axis=0)
             for t in reversed(range(step_nums)):
                 returns[t] = rewards[t] + (
                     1 - dones[t]) * self.gamma * returns[t + 1]
-            advantages = (returns - value_normalizer.denormalize(vs)
-                          if use_value_norm else returns - vs)
-            advantages = advantages[:-1]
 
+        advantages = returns - vs[:-1]
         self.buffers['returns'][path_slice, env_idx] = returns
         self.buffers['advantages'][path_slice, env_idx] = advantages
         self.start_ids[env_idx] = self.curr_ptr
 
-    def sample(self, idx):
+    def sample(self, idx: int):
         assert (
             self.size() == self.max_size
         ), 'Not enough transitions for on-policy buffer to random sample'
@@ -214,6 +210,7 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
         max_size: int,
         num_envs: int,
         num_agents: int,
+        episode_limit: int,
         obs_shape: Union[int, Tuple],
         state_shape: Union[int, Tuple],
         action_shape: Union[int, Tuple],
@@ -226,7 +223,7 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
         device: str = 'cpu',
         **kwargs,
     ) -> None:
-        super().__init__(
+        super(OnPolicyBufferRNN).__init__(
             max_size,
             num_envs,
             num_agents,
@@ -235,9 +232,13 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
             action_shape,
             reward_shape,
             done_shape,
+            gamma,
+            use_gae,
+            gae_lambda,
+            use_advantage_norm,
             device,
         )
-        self.episode_limit = kwargs.get('episode_length', None)
+        self.episode_limit = episode_limit
         self.reset_episode()
         self.episode_keys = self.episode_data.keys()
 
@@ -379,27 +380,24 @@ class OnPolicyBufferRNN(OnPolicyBuffer):
                 ),
             })
 
-    def store_transitions(self, transition_data):
-        obs_n, actions_dict, state, rewards, terminated, avail_actions = transition_data
-        self.episode_data['obs'] = obs_n
-        self.episode_data['actions'] = actions_dict['actions']
+    def store_transitions(self, transition_data: Tuple) -> None:
+        obs, state, action, rewards, values, log_pi, terminated, avail_actions = (
+            transition_data)
+        self.episode_data['obs'] = obs
+        self.episode_data['actions'] = action
         self.episode_data['rewards'] = rewards
-        self.episode_data['values'] = actions_dict['values']
-        self.episode_data['log_pi_old'] = actions_dict['log_pi']
+        self.episode_data['values'] = values
+        self.episode_data['log_pi_old'] = log_pi
         self.episode_data['terminals'] = terminated
         self.episode_data['avail_actions'] = avail_actions
         if self.state_shape is not None:
             self.episode_data['state'] = state
 
     def store_episodes(self) -> None:
-        episode_data_keys = self.episode_data.keys()
-        for env_idx in range(self.num_envs):
-            for k in self.buffer_keys:
-                if k in episode_data_keys:
-                    self.buffers[k][
-                        self.curr_ptr] = self.episode_data[k][env_idx].copy()
-            self.curr_ptr = (self.curr_ptr + 1) % self.max_size
-            self.curr_size = min(self.curr_size + 1, self.max_size)
+        for k in self.buffer_keys:
+            self.buffers[k][self.curr_ptr] = self.episode_data[k].copy()
+        self.curr_ptr = (self.curr_ptr + 1) % self.max_size
+        self.curr_size = min(self.curr_size + 1, self.max_size)
         self.reset_episode()
 
     def sample(self, indexes):

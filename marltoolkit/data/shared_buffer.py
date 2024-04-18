@@ -175,15 +175,15 @@ class SharedReplayBuffer(BaseBuffer):
 
         Called after update to model.
         """
-        self.state[0] = self.state[-1].copy()
         self.obs[0] = self.obs[-1].copy()
+        self.state[0] = self.state[-1].copy()
+        self.masks[0] = self.masks[-1].copy()
+        self.bad_masks[0] = self.bad_masks[-1].copy()
+        self.active_masks[0] = self.active_masks[-1].copy()
         self.rnn_hidden_states_actor[0] = self.rnn_hidden_states_actor[
             -1].copy()
         self.rnn_hidden_states_critic[0] = self.rnn_hidden_states_critic[
             -1].copy()
-        self.masks[0] = self.masks[-1].copy()
-        self.bad_masks[0] = self.bad_masks[-1].copy()
-        self.active_masks[0] = self.active_masks[-1].copy()
         if self.available_actions is not None:
             self.available_actions[0] = self.available_actions[-1].copy()
 
