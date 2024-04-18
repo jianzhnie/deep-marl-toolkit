@@ -40,7 +40,6 @@ class SharedReplayBuffer(BaseBuffer):
         super(SharedReplayBuffer, self).__init__(
             num_envs,
             num_agents,
-            episode_limit,
             obs_shape,
             state_shape,
             action_shape,
@@ -117,7 +116,7 @@ class SharedReplayBuffer(BaseBuffer):
         self.curr_ptr = 0
         self.curr_size = 0
 
-    def insert(
+    def store_transitions(
         self,
         obs: np.ndarray,
         state: np.ndarray,
@@ -132,7 +131,7 @@ class SharedReplayBuffer(BaseBuffer):
         rnn_hidden_states_actor: np.ndarray,
         rnn_hidden_states_critic: np.ndarray,
     ) -> None:
-        """Inserts data into the buffer.
+        """Add the transitions data into the buffer.
 
         :param obs: (np.ndarray) observation data.
         :param state: (np.ndarray) centralized observation data.
@@ -147,26 +146,25 @@ class SharedReplayBuffer(BaseBuffer):
         :param rnn_hidden_states_actor: (np.ndarray) rnn hidden states for actor.
         :param rnn_hidden_states_critic: (np.ndarray) rnn hidden states for critic.
         """
-        self.obs[self.curr_ptr + 1] = obs
-        self.state[self.curr_ptr + 1] = state
-        self.actions[self.curr_ptr] = actions
-        self.rewards[self.curr_ptr] = rewards
-        self.masks[self.curr_ptr + 1] = masks
-        self.bad_masks[self.curr_ptr] = bad_masks
-        self.active_masks[self.curr_ptr] = active_masks
-        self.value_preds[self.curr_ptr] = value_preds
-        self.action_log_probs[self.curr_ptr] = action_log_probs
+        self.obs[self.curr_ptr + 1] = obs.copy()
+        self.state[self.curr_ptr + 1] = state.copy()
+        self.actions[self.curr_ptr] = actions.copy()
+        self.rewards[self.curr_ptr] = rewards.copy()
+        self.masks[self.curr_ptr + 1] = masks.copy()
+        self.value_preds[self.curr_ptr] = value_preds.copy()
+        self.action_log_probs[self.curr_ptr] = action_log_probs.copy()
         self.rnn_hidden_states_actor[self.curr_ptr +
-                                     1] = rnn_hidden_states_actor
+                                     1] = rnn_hidden_states_actor.copy()
         self.rnn_hidden_states_critic[self.curr_ptr +
-                                      1] = rnn_hidden_states_critic
+                                      1] = (rnn_hidden_states_critic.copy())
 
         if bad_masks is not None:
-            self.bad_masks[self.curr_ptr] = bad_masks
+            self.bad_masks[self.curr_ptr + 1] = bad_masks.copy()
         if active_masks is not None:
-            self.active_masks[self.curr_ptr] = active_masks
+            self.active_masks[self.curr_ptr + 1] = active_masks.copy()
         if available_actions is not None:
-            self.available_actions[self.curr_ptr] = available_actions
+            self.available_actions[self.curr_ptr +
+                                   1] = available_actions.copy()
 
         self.curr_ptr = (self.curr_ptr + 1) % self.episode_limit
 
@@ -270,7 +268,8 @@ class SharedReplayBuffer(BaseBuffer):
                                 step] = gae + value_normalizer.denormalize(
                                     self.value_preds[step])
                     else:
-                        if self.algorithm_name == 'mat' or self.algo == 'mat_dec':
+                        if (self.algorithm_name == 'mat'
+                                or self.algorithm_name == 'mat_dec'):
                             rewards_t = self.rewards[step]
                             mean_v_t = np.mean(self.value_preds[step],
                                                axis=-2,
@@ -302,18 +301,20 @@ class SharedReplayBuffer(BaseBuffer):
                                           self.masks[step + 1] +
                                           self.rewards[step])
 
-    def feed_forward_generator(self,
-                               advantages,
-                               num_mini_batch=None,
-                               mini_batch_size=None):
+    def feed_forward_generator(
+        self,
+        advantages: np.array,
+        num_mini_batch: int = None,
+        mini_batch_size: int = None,
+    ):
         """Yield training data for MLP policies.
 
         :param advantages: (np.ndarray) advantage estimates.
         :param num_mini_batch: (int) number of minibatches to split the batch into.
         :param mini_batch_size: (int) number of samples in each minibatch.
         """
-        episode_limit, n_rollout_threads, num_agents = self.rewards.shape[0:3]
-        batch_size = n_rollout_threads * episode_limit * num_agents
+        episode_limit, num_envs, num_agents = self.rewards.shape[0:3]
+        batch_size = num_envs * episode_limit * num_agents
 
         if mini_batch_size is None:
             assert batch_size >= num_mini_batch, (
@@ -321,10 +322,10 @@ class SharedReplayBuffer(BaseBuffer):
                 '* number of steps ({}) * number of agents ({}) = {} '
                 'to be greater than or equal to the number of PPO mini batches ({}).'
                 ''.format(
-                    n_rollout_threads,
+                    num_envs,
                     episode_limit,
                     num_agents,
-                    n_rollout_threads * episode_limit * num_agents,
+                    num_envs * episode_limit * num_agents,
                     num_mini_batch,
                 ))
             mini_batch_size = batch_size // num_mini_batch
@@ -355,62 +356,57 @@ class SharedReplayBuffer(BaseBuffer):
 
         for indices in sampler:
             # obs size [T+1 N M Dim]-->[T N M Dim]-->[T*N*M,Dim]-->[index,Dim]
-            state_batch = state[indices]
             obs_batch = obs[indices]
-            rnn_hidden_states_actor_batch = rnn_hidden_states_actor[indices]
-            rnn_hidden_states_critic_batch = rnn_hidden_states_critic[indices]
+            state_batch = state[indices]
             actions_batch = actions[indices]
-            if self.available_actions is not None:
-                available_actions_batch = available_actions[indices]
-            else:
-                available_actions_batch = None
             value_preds_batch = value_preds[indices]
             return_batch = returns[indices]
             masks_batch = masks[indices]
             active_masks_batch = active_masks[indices]
             old_action_log_probs_batch = action_log_probs[indices]
+            rnn_hidden_states_actor_batch = rnn_hidden_states_actor[indices]
+            rnn_hidden_states_critic_batch = rnn_hidden_states_critic[indices]
             if advantages is None:
                 adv_targ = None
             else:
                 adv_targ = advantages[indices]
-
+            if self.available_actions is not None:
+                available_actions_batch = available_actions[indices]
+            else:
+                available_actions_batch = None
             yield (
-                state_batch,
                 obs_batch,
-                rnn_hidden_states_actor_batch,
-                rnn_hidden_states_critic_batch,
+                state_batch,
                 actions_batch,
-                value_preds_batch,
                 return_batch,
+                adv_targ,
                 masks_batch,
+                value_preds_batch,
                 active_masks_batch,
                 old_action_log_probs_batch,
-                adv_targ,
                 available_actions_batch,
+                rnn_hidden_states_actor_batch,
+                rnn_hidden_states_critic_batch,
             )
 
-    def naive_recurrent_generator(self, advantages, num_mini_batch):
+    def naive_recurrent_generator(self, advantages: np.array,
+                                  num_mini_batch: int):
         """Yield training data for non-chunked RNN training.
 
         :param advantages: (np.ndarray) advantage estimates.
         :param num_mini_batch: (int) number of minibatches to split the batch into.
         """
-        episode_limit, n_rollout_threads, num_agents = self.rewards.shape[0:3]
-        batch_size = n_rollout_threads * num_agents
-        assert n_rollout_threads * num_agents >= num_mini_batch, (
+        episode_limit, num_envs, num_agents = self.rewards.shape[0:3]
+        batch_size = num_envs * num_agents
+        assert num_envs * num_agents >= num_mini_batch, (
             'PPO requires the number of processes ({})* number of agents ({}) '
             'to be greater than or equal to the number of '
-            'PPO mini batches ({}).'.format(n_rollout_threads, num_agents,
+            'PPO mini batches ({}).'.format(num_envs, num_agents,
                                             num_mini_batch))
         num_envs_per_batch = batch_size // num_mini_batch
         perm = torch.randperm(batch_size).numpy()
-
-        state = self.state.reshape(-1, batch_size, *self.state.shape[3:])
         obs = self.obs.reshape(-1, batch_size, *self.obs.shape[3:])
-        rnn_hidden_states_actor = self.rnn_hidden_states_actor.reshape(
-            -1, batch_size, *self.rnn_hidden_states_actor.shape[3:])
-        rnn_hidden_states_critic = self.rnn_hidden_states_critic.reshape(
-            -1, batch_size, *self.rnn_hidden_states_critic.shape[3:])
+        state = self.state.reshape(-1, batch_size, *self.state.shape[3:])
         actions = self.actions.reshape(-1, batch_size, self.actions.shape[-1])
         if self.available_actions is not None:
             available_actions = self.available_actions.reshape(
@@ -422,103 +418,112 @@ class SharedReplayBuffer(BaseBuffer):
         action_log_probs = self.action_log_probs.reshape(
             -1, batch_size, self.action_log_probs.shape[-1])
         advantages = advantages.reshape(-1, batch_size, 1)
-
+        rnn_hidden_states_actor = self.rnn_hidden_states_actor.reshape(
+            -1, batch_size, *self.rnn_hidden_states_actor.shape[3:])
+        rnn_hidden_states_critic = self.rnn_hidden_states_critic.reshape(
+            -1, batch_size, *self.rnn_hidden_states_critic.shape[3:])
         for start_ind in range(0, batch_size, num_envs_per_batch):
-            state_batch = []
             obs_batch = []
-            rnn_states_batch = []
-            rnn_states_critic_batch = []
+            state_batch = []
             actions_batch = []
-            available_actions_batch = []
             value_preds_batch = []
             return_batch = []
             masks_batch = []
+            adv_targ = []
             active_masks_batch = []
             old_action_log_probs_batch = []
-            adv_targ = []
+            available_actions_batch = []
+            rnn_hidden_states_actor_batch = []
+            rnn_hidden_states_critic_batch = []
 
             for offset in range(num_envs_per_batch):
                 ind = perm[start_ind + offset]
-                state_batch.append(state[:-1, ind])
                 obs_batch.append(obs[:-1, ind])
-                rnn_states_batch.append(rnn_hidden_states_actor[0:1, ind])
-                rnn_states_critic_batch.append(rnn_hidden_states_critic[0:1,
-                                                                        ind])
+                state_batch.append(state[:-1, ind])
                 actions_batch.append(actions[:, ind])
-                if self.available_actions is not None:
-                    available_actions_batch.append(available_actions[:-1, ind])
                 value_preds_batch.append(value_preds[:-1, ind])
                 return_batch.append(returns[:-1, ind])
                 masks_batch.append(masks[:-1, ind])
+                adv_targ.append(advantages[:, ind])
                 active_masks_batch.append(active_masks[:-1, ind])
                 old_action_log_probs_batch.append(action_log_probs[:, ind])
-                adv_targ.append(advantages[:, ind])
+                if self.available_actions is not None:
+                    available_actions_batch.append(available_actions[:-1, ind])
+                rnn_hidden_states_actor_batch.append(
+                    rnn_hidden_states_actor[0:1, ind])
+                rnn_hidden_states_critic_batch.append(
+                    rnn_hidden_states_critic[0:1, ind])
 
             # [N[T, dim]]
             T, N = self.episode_limit, num_envs_per_batch
             # These are all from_numpys of size (T, N, -1)
-            state_batch = np.stack(state_batch, 1)
             obs_batch = np.stack(obs_batch, 1)
+            state_batch = np.stack(state_batch, 1)
             actions_batch = np.stack(actions_batch, 1)
-            if self.available_actions is not None:
-                available_actions_batch = np.stack(available_actions_batch, 1)
             value_preds_batch = np.stack(value_preds_batch, 1)
             return_batch = np.stack(return_batch, 1)
             masks_batch = np.stack(masks_batch, 1)
+            adv_targ = np.stack(adv_targ, 1)
             active_masks_batch = np.stack(active_masks_batch, 1)
             old_action_log_probs_batch = np.stack(old_action_log_probs_batch,
                                                   1)
-            adv_targ = np.stack(adv_targ, 1)
+            if self.available_actions is not None:
+                available_actions_batch = np.stack(available_actions_batch, 1)
 
             # States is just a (N, dim) from_numpy [N[1,dim]]
-            rnn_states_batch = np.stack(rnn_states_batch).reshape(
-                N, *self.rnn_hidden_states_actor.shape[3:])
-            rnn_states_critic_batch = np.stack(
-                rnn_states_critic_batch).reshape(
+            rnn_hidden_states_actor_batch = np.stack(
+                rnn_hidden_states_actor_batch).reshape(
+                    N, *self.rnn_hidden_states_actor.shape[3:])
+            rnn_hidden_states_critic_batch = np.stack(
+                rnn_hidden_states_critic_batch).reshape(
                     N, *self.rnn_hidden_states_critic.shape[3:])
 
             # Flatten the (T, N, ...) from_numpys to (T * N, ...)
-            state_batch = _flatten(T, N, state_batch)
             obs_batch = _flatten(T, N, obs_batch)
+            state_batch = _flatten(T, N, state_batch)
             actions_batch = _flatten(T, N, actions_batch)
+            value_preds_batch = _flatten(T, N, value_preds_batch)
+            return_batch = _flatten(T, N, return_batch)
+            masks_batch = _flatten(T, N, masks_batch)
+            adv_targ = _flatten(T, N, adv_targ)
+            active_masks_batch = _flatten(T, N, active_masks_batch)
+            old_action_log_probs_batch = _flatten(T, N,
+                                                  old_action_log_probs_batch)
             if self.available_actions is not None:
                 available_actions_batch = _flatten(T, N,
                                                    available_actions_batch)
             else:
                 available_actions_batch = None
-            value_preds_batch = _flatten(T, N, value_preds_batch)
-            return_batch = _flatten(T, N, return_batch)
-            masks_batch = _flatten(T, N, masks_batch)
-            active_masks_batch = _flatten(T, N, active_masks_batch)
-            old_action_log_probs_batch = _flatten(T, N,
-                                                  old_action_log_probs_batch)
-            adv_targ = _flatten(T, N, adv_targ)
 
             yield (
                 state_batch,
                 obs_batch,
-                rnn_states_batch,
-                rnn_states_critic_batch,
                 actions_batch,
                 value_preds_batch,
                 return_batch,
                 masks_batch,
+                adv_targ,
                 active_masks_batch,
                 old_action_log_probs_batch,
-                adv_targ,
                 available_actions_batch,
+                rnn_hidden_states_actor_batch,
+                rnn_hidden_states_critic_batch,
             )
 
-    def recurrent_generator(self, advantages, num_mini_batch,
-                            data_chunk_length):
+    def recurrent_generator(
+        self,
+        advantages: np.array,
+        num_mini_batch: int,
+        data_chunk_length: int,
+    ):
         """Yield training data for chunked RNN training.
 
         :param advantages: (np.ndarray) advantage estimates.
         :param num_mini_batch: (int) number of minibatches to split the batch into.
         :param data_chunk_length: (int) length of sequence chunks with which to train RNN.
         """
-        episode_limit, n_rollout_threads, num_agents = self.rewards.shape[0:3]
-        batch_size = n_rollout_threads * episode_limit * num_agents
+        episode_limit, num_envs, num_agents = self.rewards.shape[0:3]
+        batch_size = num_envs * episode_limit * num_agents
         data_chunks = batch_size // data_chunk_length  # [C=r*T*M/L]
         mini_batch_size = data_chunks // num_mini_batch
 
@@ -556,28 +561,25 @@ class SharedReplayBuffer(BaseBuffer):
             available_actions = _cast(self.available_actions[:-1])
 
         for indices in sampler:
-            state_batch = []
             obs_batch = []
-            rnn_hidden_states_actor_batch = []
-            rnn_hidden_states_critic_batch = []
+            state_batch = []
             actions_batch = []
-            available_actions_batch = []
             value_preds_batch = []
             return_batch = []
             masks_batch = []
+            adv_targ = []
             active_masks_batch = []
             old_action_log_probs_batch = []
-            adv_targ = []
+            available_actions_batch = []
+            rnn_hidden_states_actor_batch = []
+            rnn_hidden_states_critic_batch = []
 
             for index in indices:
                 ind = index * data_chunk_length
                 # size [T+1 N M Dim]-->[T N M Dim]-->[N,M,T,Dim]-->[N*M*T,Dim]-->[L,Dim]
-                state_batch.append(state[ind:ind + data_chunk_length])
                 obs_batch.append(obs[ind:ind + data_chunk_length])
+                state_batch.append(state[ind:ind + data_chunk_length])
                 actions_batch.append(actions[ind:ind + data_chunk_length])
-                if self.available_actions is not None:
-                    available_actions_batch.append(
-                        available_actions[ind:ind + data_chunk_length])
                 value_preds_batch.append(value_preds[ind:ind +
                                                      data_chunk_length])
                 return_batch.append(returns[ind:ind + data_chunk_length])
@@ -587,6 +589,9 @@ class SharedReplayBuffer(BaseBuffer):
                 old_action_log_probs_batch.append(
                     action_log_probs[ind:ind + data_chunk_length])
                 adv_targ.append(advantages[ind:ind + data_chunk_length])
+                if self.available_actions is not None:
+                    available_actions_batch.append(
+                        available_actions[ind:ind + data_chunk_length])
                 # size [T+1 N M Dim]-->[T N M Dim]-->[N M T Dim]-->[N*M*T,Dim]-->[1,Dim]
                 rnn_hidden_states_actor_batch.append(
                     rnn_hidden_states_actor[ind])
@@ -596,21 +601,19 @@ class SharedReplayBuffer(BaseBuffer):
             L, N = data_chunk_length, mini_batch_size
 
             # These are all from_numpys of size (L, N, Dim)
-            state_batch = np.stack(state_batch, axis=1)
             obs_batch = np.stack(obs_batch, axis=1)
-
+            state_batch = np.stack(state_batch, axis=1)
             actions_batch = np.stack(actions_batch, axis=1)
-            if self.available_actions is not None:
-                available_actions_batch = np.stack(available_actions_batch,
-                                                   axis=1)
             value_preds_batch = np.stack(value_preds_batch, axis=1)
             return_batch = np.stack(return_batch, axis=1)
             masks_batch = np.stack(masks_batch, axis=1)
+            adv_targ = np.stack(adv_targ, axis=1)
             active_masks_batch = np.stack(active_masks_batch, axis=1)
             old_action_log_probs_batch = np.stack(old_action_log_probs_batch,
                                                   axis=1)
-            adv_targ = np.stack(adv_targ, axis=1)
-
+            if self.available_actions is not None:
+                available_actions_batch = np.stack(available_actions_batch,
+                                                   axis=1)
             # States is just a (N, -1) from_numpy
             rnn_hidden_states_actor_batch = np.stack(
                 rnn_hidden_states_actor_batch).reshape(
@@ -623,30 +626,29 @@ class SharedReplayBuffer(BaseBuffer):
             state_batch = _flatten(L, N, state_batch)
             obs_batch = _flatten(L, N, obs_batch)
             actions_batch = _flatten(L, N, actions_batch)
+            value_preds_batch = _flatten(L, N, value_preds_batch)
+            return_batch = _flatten(L, N, return_batch)
+            masks_batch = _flatten(L, N, masks_batch)
+            adv_targ = _flatten(L, N, adv_targ)
+            active_masks_batch = _flatten(L, N, active_masks_batch)
+            old_action_log_probs_batch = _flatten(L, N,
+                                                  old_action_log_probs_batch)
             if self.available_actions is not None:
                 available_actions_batch = _flatten(L, N,
                                                    available_actions_batch)
             else:
                 available_actions_batch = None
-            value_preds_batch = _flatten(L, N, value_preds_batch)
-            return_batch = _flatten(L, N, return_batch)
-            masks_batch = _flatten(L, N, masks_batch)
-            active_masks_batch = _flatten(L, N, active_masks_batch)
-            old_action_log_probs_batch = _flatten(L, N,
-                                                  old_action_log_probs_batch)
-            adv_targ = _flatten(L, N, adv_targ)
-
             yield (
                 state_batch,
                 obs_batch,
-                rnn_hidden_states_actor_batch,
-                rnn_hidden_states_critic_batch,
                 actions_batch,
                 value_preds_batch,
                 return_batch,
                 masks_batch,
+                adv_targ,
                 active_masks_batch,
                 old_action_log_probs_batch,
-                adv_targ,
                 available_actions_batch,
+                rnn_hidden_states_actor_batch,
+                rnn_hidden_states_critic_batch,
             )

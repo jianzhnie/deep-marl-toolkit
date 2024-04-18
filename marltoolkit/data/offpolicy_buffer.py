@@ -136,7 +136,6 @@ class OffPolicyBuffer(BaseBuffer):
         **kwargs,
     ):
         super().__init__(
-            max_size,
             num_envs,
             num_agents,
             obs_shape,

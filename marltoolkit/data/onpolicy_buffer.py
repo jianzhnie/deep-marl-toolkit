@@ -41,7 +41,6 @@ class OnPolicyBuffer(BaseBuffer):
         **kwargs,
     ) -> None:
         super(OnPolicyBuffer, self).__init__(
-            max_size,
             num_envs,
             num_agents,
             obs_shape,

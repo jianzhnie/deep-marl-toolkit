@@ -12,7 +12,6 @@ class BaseBuffer(ABC):
     replay buffers.
 
     Args:
-        :param max_size: Maximum capacity of the buffer.
         :param num_envs: Number of environments.
         :param num_agents: Number of agents.
         :param obs_shape: Dimensionality of the observation space.
@@ -26,7 +25,6 @@ class BaseBuffer(ABC):
 
     def __init__(
         self,
-        max_size: int,
         num_envs: int,
         num_agents: int,
         obs_shape: Union[int, Tuple],
@@ -39,7 +37,6 @@ class BaseBuffer(ABC):
     ) -> None:
         super().__init__()
         self.num_envs = num_envs
-        self.max_size = max_size
         self.num_agents = num_agents
         self.obs_shape = obs_shape
         self.state_shape = state_shape
