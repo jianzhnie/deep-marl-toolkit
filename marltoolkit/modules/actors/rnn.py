@@ -1,6 +1,10 @@
+import argparse
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from marltoolkit.utils.env_utils import get_actor_input_dim
 
 
 class RNNActorModel(nn.Module):
@@ -14,21 +18,15 @@ class RNNActorModel(nn.Module):
         n_actions (int): The number of actions.
     """
 
-    def __init__(
-        self,
-        input_dim: int = None,
-        fc_hidden_dim: int = 64,
-        rnn_hidden_dim: int = 64,
-        n_actions: int = None,
-        **kwargs,
-    ) -> None:
+    def __init__(self, args: argparse.Namespace = None) -> None:
         super(RNNActorModel, self).__init__()
-
-        self.rnn_hidden_dim = rnn_hidden_dim
-        self.fc1 = nn.Linear(input_dim, fc_hidden_dim)
-        self.rnn = nn.GRUCell(input_size=fc_hidden_dim,
-                              hidden_size=rnn_hidden_dim)
-        self.fc2 = nn.Linear(rnn_hidden_dim, n_actions)
+        self.args = args
+        self.input_dim = get_actor_input_dim(args)
+        self.rnn_hidden_dim = args.rnn_hidden_dim
+        self.fc1 = nn.Linear(self.input_dim, args.fc_hidden_dim)
+        self.rnn = nn.GRUCell(input_size=args.fc_hidden_dim,
+                              hidden_size=args.rnn_hidden_dim)
+        self.fc2 = nn.Linear(args.rnn_hidden_dim, args.n_actions)
 
     def init_hidden(self):
         # make hidden states on same device as model
@@ -36,15 +34,16 @@ class RNNActorModel(nn.Module):
 
     def forward(
         self,
-        input: torch.Tensor = None,
+        inputs: torch.Tensor = None,
         hidden_state: torch.Tensor = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        out = F.relu(self.fc1(input), inplace=True)
+        out = F.relu(self.fc1(inputs), inplace=True)
+
         if hidden_state is not None:
             h_in = hidden_state.reshape(-1, self.rnn_hidden_dim)
         else:
             h_in = torch.zeros(out.shape[0],
-                               self.rnn_hidden_dim).to(input.device)
+                               self.rnn_hidden_dim).to(inputs.device)
 
         hidden_state = self.rnn(out, h_in)
         out = self.fc2(hidden_state)  # (batch_size, n_actions)

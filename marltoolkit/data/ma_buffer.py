@@ -51,18 +51,11 @@ class EpisodeData:
     def reset(self):
         self.episode_buffer = dict(
             obs=np.zeros(
-                (self.episode_limit, ) + self.obs_shape,
+                (self.episode_limit, self.num_agents) + self.obs_shape,
                 dtype=np.float32,
             ),
             actions=np.zeros(
                 (self.episode_limit, ) + (self.num_agents, ),
-                dtype=np.int8,
-            ),
-            last_actions=np.zeros(
-                (
-                    self.episode_limit,
-                    self.num_agents,
-                ) + self.action_shape,
                 dtype=np.int8,
             ),
             available_actions=np.zeros(
@@ -103,7 +96,6 @@ class EpisodeData:
             - obs (np.ndarray): Observation data.
             - state (np.ndarray): State data.
             - actions (np.ndarray): Actions taken.
-            - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
             - dones (np.ndarray): Termination flag.
@@ -214,6 +206,7 @@ class ReplayBuffer:
                 (
                     self.max_size,
                     self.episode_limit,
+                    self.num_agents,
                 ) + self.obs_shape,
                 dtype=np.float32,
             ),
@@ -222,14 +215,6 @@ class ReplayBuffer:
                     self.max_size,
                     self.episode_limit,
                 ) + (self.num_agents, ),
-                dtype=np.int8,
-            ),
-            last_actions=np.zeros(
-                (
-                    self.max_size,
-                    self.episode_limit,
-                    self.num_agents,
-                ) + self.action_shape,
                 dtype=np.int8,
             ),
             available_actions=np.zeros(
@@ -284,7 +269,6 @@ class ReplayBuffer:
             - obs (np.ndarray): Observation data.
             - state (np.ndarray): State data.
             - actions (np.ndarray): Actions taken.
-            - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
             - dones (np.ndarray): Termination flag.
@@ -307,7 +291,6 @@ class ReplayBuffer:
             - obs (np.ndarray): Observation data.
             - state (np.ndarray): State data.
             - actions (np.ndarray): Actions taken.
-            - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
             - dones (np.ndarray): Termination flag.

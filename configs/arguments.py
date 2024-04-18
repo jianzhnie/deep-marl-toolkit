@@ -43,11 +43,11 @@ def get_common_args() -> argparse.Namespace:
             number of parallel envs for training rollout. by default 2
         --num_test_envs <int>
             number of parallel envs for evaluating rollout. by default 1
-        --use_gloabl_state <bool>
+        --use_global_state <bool>
             whether to use the global state
-        --use_last_action <bool>
+        --use_last_actions <bool>
             whether to use the last action
-        --use_agent_id_onehot <bool>
+        --use_agents_id_onehot <bool>
             whether to use the agent id transform
 
     Network parameters:
@@ -215,7 +215,7 @@ def get_common_args() -> argparse.Namespace:
         help='Number of parallel envs for evaluating rollouts',
     )
     parser.add_argument(
-        '--num_env_steps',
+        '--total_steps',
         type=int,
         default=10e6,
         help='Number of environment steps to train (default: 10e6)',
@@ -261,21 +261,21 @@ def get_common_args() -> argparse.Namespace:
         help='Num of parallel threads running the env',
     )
     parser.add_argument(
-        '--use_gloabl_state',
+        '--use_global_state',
         type=bool,
         default=False,
         help='whether to use the global state',
     )
     parser.add_argument(
-        '--use_last_action',
+        '--use_last_actions',
         type=bool,
-        default=False,
+        default=True,
         help='whether to use the last action',
     )
     parser.add_argument(
-        '--use_agent_id_onehot',
+        '--use_agents_id_onehot',
         type=bool,
-        default=False,
+        default=True,
         help='whether to use the agent id transform',
     )
 

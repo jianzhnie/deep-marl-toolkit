@@ -21,43 +21,6 @@ from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
 
 
-def get_actor_input_dim(args: argparse.Namespace) -> None:
-    """Get the input shape of the actor model.
-
-    Args:
-        args (argparse.Namespace): The arguments
-    Returns:
-        input_shape (int): The input shape of the actor model.
-    """
-    input_dim = args.obs_dim
-    if args.use_gloabl_state:
-        input_dim += args.state_dim
-    if args.use_last_action:
-        input_dim += args.n_actions
-    if args.use_agent_id_onehot:
-        input_dim += args.num_agents
-    return input_dim
-
-
-def get_critic_input_dim(args: argparse.Namespace) -> None:
-    """Get the input shape of the critic model.
-
-    Args:
-        args (argparse.Namespace): The arguments.
-
-    Returns:
-        input_dim (int): The input shape of the critic model.
-    """
-    input_dim = args.obs_dim
-    if args.use_gloabl_state:
-        input_dim += args.state_dim
-    if args.use_last_action:
-        input_dim += args.n_actions
-    if args.use_agent_id_onehot:
-        input_dim += args.num_agents
-    return input_dim
-
-
 def main():
     """Main function for running the QMix algorithm.
 
@@ -74,7 +37,7 @@ def main():
     device = torch.device('cuda') if torch.cuda.is_available(
     ) and args.cuda else torch.device('cpu')
 
-    env = SMACWrapperEnv(map_name=args.scenario, difficulty=args.difficulty)
+    env = SMACWrapperEnv(map_name=args.scenario, args=args)
     args.episode_limit = env.episode_limit
     args.obs_dim = env.obs_dim
     args.obs_shape = env.obs_shape
@@ -115,26 +78,21 @@ def main():
     else:  # wandb
         logger.load(writer)
 
-    args.actor_input_dim = get_actor_input_dim(args)
-    args.obs_shape = (args.num_agents, args.actor_input_dim)
+    args.obs_shape = env.get_actor_input_shape()
 
     rpm = ReplayBuffer(
         max_size=args.replay_buffer_size,
         num_agents=args.num_agents,
         episode_limit=args.episode_limit,
-        obs_space=args.obs_shape,
-        state_space=args.state_shape,
-        action_space=args.action_shape,
-        reward_space=args.reward_shape,
-        done_space=args.done_shape,
+        obs_shape=args.obs_shape,
+        state_shape=args.state_shape,
+        action_shape=args.action_shape,
+        reward_shape=args.reward_shape,
+        done_shape=args.done_shape,
         device=device,
     )
 
-    actor_model = RNNActorModel(
-        input_dim=args.actor_input_dim,
-        rnn_hidden_dim=args.rnn_hidden_dim,
-        n_actions=args.n_actions,
-    )
+    actor_model = RNNActorModel(args)
 
     mixer_model = QMixerModel(
         num_agents=args.num_agents,

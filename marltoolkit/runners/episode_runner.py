@@ -1,8 +1,6 @@
 import argparse
 from typing import Tuple
 
-import numpy as np
-
 from marltoolkit.agents.base_agent import BaseAgent
 from marltoolkit.data.ma_buffer import ReplayBuffer
 from marltoolkit.envs import MultiAgentEnv
@@ -14,37 +12,22 @@ def run_train_episode(
     agent: BaseAgent,
     rpm: ReplayBuffer,
     args: argparse.Namespace = None,
-):
+) -> dict[str, float]:
     episode_reward = 0.0
     episode_step = 0
     done = False
     agent.init_hidden_states(batch_size=1)
     (obs, state, info) = env.reset()
-
-    agents_id_onehot = env.get_agents_id_one_hot()
-    if args.use_last_action:
-        last_actions = np.zeros((args.num_agents, args.n_actions),
-                                dtype=np.float32)
-        obs = np.concatenate([obs, last_actions], axis=-1)
-    if args.use_agent_id_onehot:
-        obs = np.concatenate([obs, agents_id_onehot], axis=-1)
-
     while not done:
         available_actions = env.get_available_actions()
-        actions = agent.sample(obs, available_actions)
-        last_actions = env.get_actions_one_hot(actions)
+        actions = agent.sample(obs=obs, available_actions=available_actions)
         next_obs, next_state, reward, terminated, truncated, info = env.step(
             actions)
-        if args.use_last_action:
-            next_obs = np.concatenate([next_obs, last_actions], axis=-1)
-        if args.use_agent_id_onehot:
-            next_obs = np.concatenate([next_obs, agents_id_onehot], axis=-1)
         done = terminated or truncated
         transitions = {
             'obs': obs,
             'state': state,
             'actions': actions,
-            'last_actions': last_actions,
             'available_actions': available_actions,
             'rewards': reward,
             'dones': done,
@@ -94,27 +77,14 @@ def run_eval_episode(
         done = False
         obs, state, info = env.reset()
 
-        agents_id_onehot = env.get_agents_id_one_hot()
-        if args.use_last_action:
-            last_actions = np.zeros((args.num_agents, args.n_actions),
-                                    dtype=np.float32)
-            obs = np.concatenate([obs, last_actions], axis=-1)
-        if args.use_agent_id_onehot:
-            obs = np.concatenate([obs, agents_id_onehot], axis=-1)
-
         while not done:
             available_actions = env.get_available_actions()
-            actions = agent.predict(obs, available_actions)
-            last_actions = env.get_actions_one_hot(actions)
+            actions = agent.predict(
+                obs=obs,
+                available_actions=available_actions,
+            )
             next_obs, next_state, reward, terminated, truncated, info = env.step(
                 actions)
-
-            if args.use_last_action:
-                next_obs = np.concatenate([next_obs, last_actions], axis=-1)
-            if args.use_agent_id_onehot:
-                next_obs = np.concatenate([next_obs, agents_id_onehot],
-                                          axis=-1)
-
             done = terminated or truncated
             obs = next_obs
             episode_step += 1
