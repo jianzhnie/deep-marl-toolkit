@@ -41,6 +41,14 @@ class MLPBase(nn.Module):
         self.apply(init_weight)
 
     def forward(self, inputs: torch.Tensor):
+        """Forward method for MLPBase.
+
+        Args:
+            inputs (torch.Tensor): Input tensor. Shape (batch_size, input_dim)
+
+        Returns:
+            output (torch.Tensor): Output tensor. Shape (batch_size, hidden_dim)
+        """
         if self.use_feature_normalization:
             output = self.feature_norm(inputs)
 
@@ -122,7 +130,10 @@ class RNNLayer(nn.Module):
         self.rnn_layers = rnn_layers
         self.use_orthogonal = use_orthogonal
 
-        self.rnn = nn.GRU(input_dim, rnn_hidden_dim, num_layers=rnn_layers)
+        self.rnn = nn.GRU(input_dim,
+                          rnn_hidden_dim,
+                          num_layers=rnn_layers,
+                          batch_first=True)
         for name, param in self.rnn.named_parameters():
             if 'bias' in name:
                 nn.init.constant_(param, 0)
@@ -139,12 +150,30 @@ class RNNLayer(nn.Module):
         hidden_state: torch.Tensor,
         masks: torch.Tensor,
     ) -> tuple[Any, torch.Tensor]:
+        """Forward method for RNNLayer.
+
+        Args:
+            inputs (torch.Tensor): (num_agents, input_dim)
+            hidden_state (torch.Tensor): (num_agents, rnn_layers, rnn_hidden_dim)
+            masks (torch.Tensor): (num_agents, 1)
+
+        Returns:
+            tuple[Any, torch.Tensor]: (output, hidden_state)
+        """
+        print('inputs.shape: ', inputs.shape)
+        print('hidden_state.shape: ', hidden_state.shape)
+        print('masks.shape: ', masks.shape)
+
         if inputs.size(0) == hidden_state.size(0):
-            inputs = inputs.unsqueeze(0)
-            hidden_state = (hidden_state * masks.repeat(
-                1, self.rnn_layers).unsqueeze(-1).transpose(0, 1).contiguous())
+            # If the batch size is the same, we can just run the RNN
+            masks = masks.repeat(1, self.rnn_layers).unsqueeze(-1)
+            # mask shape (num_agents, rnn_layers, 1)
+            hidden_state = (hidden_state * masks).transpose(0, 1).contiguous()
+            # hidden_state shape (rnn_layers, num_agents, rnn_hidden_dim)
+            inputs = inputs.unsqueeze(0).transpose(0, 1)
+            # inputs shape (1, num_agents, input_dim)
             output, hidden_state = self.rnn(inputs, hidden_state)
-            output = output.squeeze(0)
+            output = output.squeeze(1)
             hidden_state = hidden_state.transpose(0, 1)
         else:
             # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
@@ -191,5 +220,5 @@ class RNNLayer(nn.Module):
             inputs = inputs.reshape(T * N, -1)
             hidden_state = hidden_state.transpose(0, 1)
 
-        output = self.layer_norm(inputs)
+        output = self.layer_norm(outputs)
         return output, hidden_state

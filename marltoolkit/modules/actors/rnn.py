@@ -4,8 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from marltoolkit.utils.env_utils import get_actor_input_dim
-
 
 class RNNActorModel(nn.Module):
     """Because all the agents share the same network,
@@ -21,9 +19,8 @@ class RNNActorModel(nn.Module):
     def __init__(self, args: argparse.Namespace = None) -> None:
         super(RNNActorModel, self).__init__()
         self.args = args
-        self.input_dim = get_actor_input_dim(args)
         self.rnn_hidden_dim = args.rnn_hidden_dim
-        self.fc1 = nn.Linear(self.input_dim, args.fc_hidden_dim)
+        self.fc1 = nn.Linear(self.actor_input_dim, args.fc_hidden_dim)
         self.rnn = nn.GRUCell(input_size=args.fc_hidden_dim,
                               hidden_size=args.rnn_hidden_dim)
         self.fc2 = nn.Linear(args.rnn_hidden_dim, args.n_actions)
@@ -119,9 +116,12 @@ class MultiLayerRNNActorModel(nn.Module):
 
 
 if __name__ == '__main__':
-    rnn = nn.GRU(input_size=10, hidden_size=20, num_layers=2, batch_first=True)
-    input = torch.randn(32, 512, 10)
-    h0 = torch.randn(2, 32, 20)
+    rnn = nn.GRU(input_size=512,
+                 hidden_size=256,
+                 num_layers=2,
+                 batch_first=True)
+    input = torch.randn(3, 512)
+    h0 = torch.randn(2, 256)
     output, hn = rnn(input, h0)
     print(output.shape, hn.shape)
     # torch.Size([32, 512, 20]) torch.Size([2, 32, 20])

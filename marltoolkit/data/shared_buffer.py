@@ -51,48 +51,48 @@ class SharedReplayBuffer(object):
         self.algorithm_name = args.algorithm_name
 
         self.obs = np.zeros(
-            (self.episode_limit + 1, self.num_agents) + obs_shape,
+            (episode_limit + 1, num_agents) + obs_shape,
             dtype=np.float32,
         )
         self.state = np.zeros(
-            (self.episode_limit + 1, ) + state_shape,
+            (episode_limit + 1, ) + state_shape,
             dtype=np.float32,
         )
         self.actions = np.zeros(
-            (self.episode_limit, num_agents),
+            (episode_limit, num_agents),
             dtype=np.float32,
         )
         self.rewards = np.zeros(
-            (self.episode_limit, 1),
+            (episode_limit, 1),
             dtype=np.float32,
         )
         self.value_preds = np.zeros(
-            (self.episode_limit + 1, 1),
+            (episode_limit + 1, 1),
             dtype=np.float32,
         )
         self.returns = np.zeros_like(self.value_preds)
         self.advantages = np.zeros(
-            (self.episode_limit, 1),
+            (episode_limit, 1),
             dtype=np.float32,
         )
         self.action_log_probs = np.zeros(
-            (self.episode_limit, ) + action_shape,
+            (episode_limit, ) + action_shape,
             dtype=np.float32,
         )
         self.masks = np.ones(
-            (self.episode_limit + 1, num_agents, 1),
+            (episode_limit + 1, num_agents, 1),
             dtype=np.float32,
         )
         self.bad_masks = np.ones_like(self.masks)
         self.active_masks = np.ones_like(self.masks)
         self.available_actions = np.zeros(
-            (self.episode_limit + 1, num_agents) + action_shape,
+            (episode_limit + 1, num_agents) + action_shape,
             dtype=np.float32,
         )
         self.rnn_states_actor = np.zeros(
             (
-                self.episode_limit + 1,
-                self.num_agents,
+                episode_limit + 1,
+                num_agents,
                 self.rnn_layers,
                 self.hidden_size,
             ),

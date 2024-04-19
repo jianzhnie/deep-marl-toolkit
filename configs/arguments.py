@@ -17,22 +17,20 @@ def get_common_args() -> argparse.Namespace:
             by default, make sure random seed effective. if set, bypass such function.
         --n_training_threads <int>
             number of training threads working in parallel. by default 1
-        --n_eval_rollout_threads <int>
-            number of parallel envs for evaluating rollout. by default 1
-        --num_env_steps <int>
+        --n_eval_threads <int>
+            number of evaluation threads working in parallel. by default 1
+        --total_steps <int>
             number of env steps to train (default: 10e6)
-        --user_name <str>
-            [for wandb usage], to specify user's name for simply collecting training data.
         --use_wandb
             [for wandb usage], by default True, will log date to wandb server. or else will use tensorboard to log data.
 
     Env parameters:
         --project <str>
             The Project name
-        --env_id <str>
+        --env_name <str>
             specify the name of environment
-        --scenario <str>
-            specify the scenario of environment
+        --map_name <str>
+            specify the map_name of environment
         --difficulty <str>
             specify the difficulty of environment
         --delta_time <float>
@@ -182,7 +180,7 @@ def get_common_args() -> argparse.Namespace:
     parser.add_argument(
         '--algorithm_name',
         type=str,
-        default='mappo',
+        default='rmappo',
         choices=['rmappo', 'mappo', 'happo', 'hatrpo', 'mat', 'mat_dec'],
     )
     parser.add_argument('--seed',
@@ -209,10 +207,10 @@ def get_common_args() -> argparse.Namespace:
         help='Number of torch threads for training',
     )
     parser.add_argument(
-        '--n_eval_rollout_threads',
+        '--n_eval_threads',
         type=int,
         default=1,
-        help='Number of parallel envs for evaluating rollouts',
+        help='Number of torch threads for  evaluating',
     )
     parser.add_argument(
         '--total_steps',
@@ -228,11 +226,11 @@ def get_common_args() -> argparse.Namespace:
         default='StarCraft2',
         help='The project which env is in',
     )
-    parser.add_argument('--env_id',
+    parser.add_argument('--env_name',
                         type=str,
                         default='SMAC-v1',
                         help='the map of the game')
-    parser.add_argument('--scenario',
+    parser.add_argument('--map_name',
                         type=str,
                         default='3m',
                         help='the map of the game')
@@ -251,7 +249,7 @@ def get_common_args() -> argparse.Namespace:
     parser.add_argument(
         '--num_train_envs',
         type=int,
-        default=2,
+        default=1,
         help='Num of parallel threads running the env',
     )
     parser.add_argument(
@@ -310,9 +308,8 @@ def get_common_args() -> argparse.Namespace:
         default=64,
         help='Dimension of hidden layers for actor/critic networks',
     )
-    parser.add_argument('--use_relu',
-                        action='store_false',
-                        default=True,
+    parser.add_argument('--activation',
+                        default='relu',
                         help='Whether to use ReLU')
     parser.add_argument(
         '--use_popart',

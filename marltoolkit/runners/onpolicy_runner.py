@@ -1,16 +1,16 @@
 import argparse
 from typing import Tuple
 
-from marltoolkit.agents.base_agent import BaseAgent
-from marltoolkit.data.ma_buffer import ReplayBuffer
-from marltoolkit.envs import MultiAgentEnv
+from marltoolkit.agents.mappo_agent import MAPPOAgent
+from marltoolkit.data.shared_buffer import SharedReplayBuffer
+from marltoolkit.envs.smacv1 import SMACWrapperEnv
 from marltoolkit.utils.logger.logs import avg_val_from_list_of_dicts
 
 
 def run_train_episode(
-    env: MultiAgentEnv,
-    agent: BaseAgent,
-    rpm: ReplayBuffer,
+    env: SMACWrapperEnv,
+    agent: MAPPOAgent,
+    rpm: SharedReplayBuffer,
     args: argparse.Namespace = None,
 ) -> dict[str, float]:
     episode_reward = 0.0
@@ -18,7 +18,13 @@ def run_train_episode(
     done = False
     agent.init_hidden_states(batch_size=1)
     (obs, state, info) = env.reset()
-    while not done:
+    available_actions = env.get_available_actions()
+
+    rpm.obs[0] = obs.copy()
+    rpm.state[0] = state.copy()
+    rpm.available_actions[0] = available_actions.copy()
+
+    for step in range(args.episode_limit):
         available_actions = env.get_available_actions()
         actions = agent.sample(obs=obs, available_actions=available_actions)
         next_obs, next_state, reward, terminated, truncated, info = env.step(
@@ -64,8 +70,8 @@ def run_train_episode(
 
 
 def run_eval_episode(
-    env: MultiAgentEnv,
-    agent: BaseAgent,
+    env: SMACWrapperEnv,
+    agent: MAPPOAgent,
     args: argparse.Namespace = None,
 ) -> Tuple[float, float, float]:
     eval_res_list = []
