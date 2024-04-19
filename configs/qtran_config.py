@@ -8,20 +8,20 @@ QTranConfig = {
     'min_learning_rate': 0.0001,
     'memory_warmup_size': 32,
     'gamma': 0.99,
-    'exploration_start': 1.0,
+    'egreedy_exploration': 1.0,
     'min_exploration': 0.1,
-    'update_target_interval': 2000,
+    'target_update_interval': 2000,
     'batch_size': 32,
     'total_steps': 1000000,
     'train_log_interval': 5,  # log every 10 episode
     'test_log_interval': 20,  # log every 100 epidode
     'clip_grad_norm': 10,
-    'update_learner_freq': 2,
+    'learner_update_freq': 2,
     'double_q': True,
     'opt_loss_coef': 1.0,
     'nopt_min_loss_coef': 0.1,
     'difficulty': '7',
     'algo': 'qtran',
     'log_dir': 'work_dirs/',
-    'logger': 'wandb'
+    'logger': 'wandb',
 }

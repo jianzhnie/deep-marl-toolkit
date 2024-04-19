@@ -109,10 +109,10 @@ def main():
         gamma=args.gamma,
         actor_lr=args.learning_rate,
         critic_lr=args.learning_rate,
-        exploration_start=args.exploration_start,
+        egreedy_exploration=args.egreedy_exploration,
         min_exploration=args.min_exploration,
-        update_target_interval=args.update_target_interval,
-        update_learner_freq=args.update_learner_freq,
+        target_update_interval=args.target_update_interval,
+        learner_update_freq=args.learner_update_freq,
         clip_grad_norm=args.clip_grad_norm,
         device=args.device,
     )

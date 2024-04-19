@@ -43,11 +43,11 @@ class ComaAgent(BaseAgent):
         entropy_coef: float = 0.01,
         actor_lr: float = 0.0005,
         critic_lr: float = 0.0001,
-        exploration_start: float = 1.0,
+        egreedy_exploration: float = 1.0,
         min_exploration: float = 0.01,
         update_target_method: str = 'hard',
-        update_target_interval: int = 100,
-        update_learner_freq: int = 1,
+        target_update_interval: int = 100,
+        learner_update_freq: int = 1,
         optimizer_type: str = 'rmsprop',
         add_value_last_step: bool = True,
         clip_grad_norm: float = 10,
@@ -69,12 +69,12 @@ class ComaAgent(BaseAgent):
         self.add_value_last_step = add_value_last_step
         self.clip_grad_norm = clip_grad_norm
         self.global_steps = 0
-        self.exploration = exploration_start
+        self.exploration = egreedy_exploration
         self.min_exploration = min_exploration
         self.target_update_count = 0
         self.update_target_method = update_target_method
-        self.update_target_interval = update_target_interval
-        self.update_learner_freq = update_learner_freq
+        self.target_update_interval = target_update_interval
+        self.learner_update_freq = learner_update_freq
         self.device = device
 
         self.actor_model = actor_model.to(device)
@@ -106,7 +106,7 @@ class ComaAgent(BaseAgent):
                 eps=optim_eps,
             )
 
-        self.ep_scheduler = LinearDecayScheduler(exploration_start,
+        self.ep_scheduler = LinearDecayScheduler(egreedy_exploration,
                                                  total_steps * 0.8)
 
         lr_steps = [total_steps * 0.5, total_steps * 0.8]
@@ -227,7 +227,7 @@ class ComaAgent(BaseAgent):
         filled_episode = episode_data['filled'].float()
 
         # update target model
-        if self.global_steps % self.update_target_interval == 0:
+        if self.global_steps % self.target_update_interval == 0:
             self.update_target(update_method=self.update_target_method)
             self.target_update_count += 1
 

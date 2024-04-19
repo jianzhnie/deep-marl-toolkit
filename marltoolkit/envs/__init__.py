@@ -1,5 +1,5 @@
 from .base_env import MultiAgentEnv
-from .smacv1 import SMACWrapperEnv
+from .smacv1.smac_env import SMACWrapperEnv
 from .vec_env import BaseVecEnv, DummyVecEnv, SubprocVecEnv
 
 __all__ = [

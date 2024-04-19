@@ -45,7 +45,7 @@ def run_train_episode(env, agent, rpm: ReplayBuffer, config: dict = None):
     mean_opt_loss = []
     mean_nopt_loss = []
     if rpm.size() > config['memory_warmup_size']:
-        for _ in range(config['update_learner_freq']):
+        for _ in range(config['learner_update_freq']):
             batch = rpm.sample_batch(config['batch_size'])
             loss, td_loss, opt_loss, nopt_loss = agent.learn(**batch)
             mean_loss.append(loss)

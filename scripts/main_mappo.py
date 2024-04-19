@@ -1,4 +1,3 @@
-import argparse
 import os
 import sys
 import time
@@ -9,19 +8,16 @@ from torch.utils.tensorboard import SummaryWriter
 sys.path.append('../')
 
 from configs.arguments import get_common_args
-from configs.qmix_config import QMixConfig
-from marltoolkit.agents.qmix_agent import QMixAgent
-from marltoolkit.data import ReplayBuffer
-from marltoolkit.envs.smacv1.smac_env import SMACWrapperEnv
-from marltoolkit.modules.actors import RNNActorModel
-from marltoolkit.modules.mixers import QMixerModel
+from marltoolkit.agents.mappo_agent import MAPPOAgent
+from marltoolkit.data.shared_buffer import SharedReplayBuffer
+from marltoolkit.envs.smacv1 import SMACWrapperEnv
 from marltoolkit.runners.episode_runner import (run_eval_episode,
                                                 run_train_episode)
 from marltoolkit.utils import (ProgressBar, TensorboardLogger, WandbLogger,
                                get_outdir, get_root_logger)
 
 
-def main():
+def main() -> None:
     """Main function for running the QMix algorithm.
 
     This function initializes the necessary configurations, environment, logger, models, and agents.
@@ -30,13 +26,58 @@ def main():
     Returns:
         None
     """
-    qmix_config = QMixConfig()
-    common_args = get_common_args()
-    args = argparse.Namespace(**vars(qmix_config))
-    args.__dict__.update(**vars(common_args))
-    device = torch.device('cuda') if torch.cuda.is_available(
-    ) and args.cuda else torch.device('cpu')
+    args = get_common_args()
+    if args.algorithm_name == 'rmappo':
+        args.use_recurrent_policy = True
+        args.use_naive_recurrent_policy = False
 
+    if args.algorithm_name == 'rmappo':
+        print(
+            'u are choosing to use rmappo, we set use_recurrent_policy to be True'
+        )
+        args.use_recurrent_policy = True
+        args.use_naive_recurrent_policy = False
+    elif (args.algorithm_name == 'mappo' or args.algorithm_name == 'mat'
+          or args.algorithm_name == 'mat_dec'):
+        assert (args.use_recurrent_policy is False
+                and args.use_naive_recurrent_policy is False
+                ), 'check recurrent policy!'
+        print(
+            'U are choosing to use mappo, we set use_recurrent_policy & use_naive_recurrent_policy to be False'
+        )
+        args.use_recurrent_policy = False
+        args.use_naive_recurrent_policy = False
+
+    elif args.algorithm_name == 'ippo':
+        print(
+            'u are choosing to use ippo, we set use_centralized_v to be False')
+        args.use_centralized_v = False
+    elif args.algorithm_name == 'happo' or args.algorithm_name == 'hatrpo':
+        # can or cannot use recurrent network?
+        print('using', args.algorithm_name, 'without recurrent network')
+        args.use_recurrent_policy = False
+        args.use_naive_recurrent_policy = False
+    else:
+        raise NotImplementedError
+
+    if args.algorithm_name == 'mat_dec':
+        args.dec_actor = True
+        args.share_actor = True
+
+    # cuda
+    if args.cuda and torch.cuda.is_available():
+        print('choose to use gpu...')
+        args.device = torch.device('cuda')
+        torch.set_num_threads(args.n_training_threads)
+        if args.cuda_deterministic:
+            torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.deterministic = True
+    else:
+        print('choose to use cpu...')
+        args.device = torch.device('cpu')
+        torch.set_num_threads(args.n_training_threads)
+
+    # Environment
     env = SMACWrapperEnv(map_name=args.scenario, args=args)
     args.episode_limit = env.episode_limit
     args.obs_dim = env.obs_dim
@@ -48,7 +89,6 @@ def main():
     args.action_shape = env.action_shape
     args.reward_shape = env.reward_shape
     args.done_shape = env.done_shape
-    args.device = device
 
     # init the logger before other steps
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
@@ -80,44 +120,19 @@ def main():
 
     args.obs_shape = env.get_actor_input_shape()
 
-    rpm = ReplayBuffer(
-        max_size=args.replay_buffer_size,
-        num_agents=args.num_agents,
-        episode_limit=args.episode_limit,
-        obs_shape=args.obs_shape,
-        state_shape=args.state_shape,
-        action_shape=args.action_shape,
-        reward_shape=args.reward_shape,
-        done_shape=args.done_shape,
-        device=device,
-    )
-
-    actor_model = RNNActorModel(args)
-
-    mixer_model = QMixerModel(
-        num_agents=args.num_agents,
-        state_dim=args.state_dim,
-        mixing_embed_dim=args.mixing_embed_dim,
-        hypernet_layers=args.hypernet_layers,
-        hypernet_embed_dim=args.hypernet_embed_dim,
-    )
-
-    agent = QMixAgent(
-        actor_model=actor_model,
-        mixer_model=mixer_model,
-        num_agents=args.num_agents,
-        double_q=args.double_q,
-        total_steps=args.total_steps,
-        gamma=args.gamma,
-        learning_rate=args.learning_rate,
-        min_learning_rate=args.min_learning_rate,
-        egreedy_exploration=args.egreedy_exploration,
-        min_exploration=args.min_exploration,
-        target_update_tau=args.target_update_tau,
-        target_update_interval=args.target_update_interval,
-        learner_update_freq=args.learner_update_freq,
-        clip_grad_norm=args.clip_grad_norm,
-        device=args.device,
+    # policy network
+    agent = MAPPOAgent(args)
+    # buffer
+    rpm = SharedReplayBuffer(
+        args.num_envs,
+        args.num_agents,
+        args.episode_limit,
+        args.obs_shape,
+        args.state_shape,
+        args.action_shape,
+        args.reward_shape,
+        args.done_shape,
+        args,
     )
 
     progress_bar = ProgressBar(args.memory_warmup_size)

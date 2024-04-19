@@ -1,4 +1,5 @@
-from typing import List, Tuple, TypeVar, Union
+import argparse
+from typing import Any, List, Tuple, TypeVar, Union
 
 import gymnasium as gym
 import numpy as np
@@ -14,13 +15,16 @@ AgentID = TypeVar('AgentID')
 class SMACWrapperEnv(object):
     """Wrapper for StarCraft2Env providing a more user-friendly interface."""
 
-    def __init__(self, map_name: str, **kwargs):
+    def __init__(self,
+                 map_name: str,
+                 args: argparse.Namespace = None,
+                 **kwargs) -> None:
         """Initialize the SC2Env.
 
         Parameters:
         - map_name (str): Name of the map for the StarCraft2 environment.
         """
-
+        self.args = args
         self.env = StarCraft2Env(map_name=map_name, **kwargs)
         self.env_info = self.env.get_env_info()
 
@@ -42,33 +46,38 @@ class SMACWrapperEnv(object):
         self.done_dim = 1
 
         # Observation and state shapes
-        self.obs_shape = (self.num_agents, self.obs_dim)
+        self.obs_shape = (self.obs_dim, )
         self.action_shape = (self.action_dim, )
+        self.avaliable_action_shape = (self.action_dim, )
         self.state_shape = (self.state_dim, )
         self.reward_shape = (self.reward_dim, )
         self.done_shape = (self.done_dim, )
 
+        # Multi-Agent Observation, State, and Action Shapes
+        self.obs_shapes = []
+        self.state_shapes = []
+        self.action_shapes = []
+        for agent_id in self.agents:
+            self.obs_shapes.append(self.obs_shape)
+            self.state_shapes.append(self.state_shape)
+            self.action_shapes.append(self.action_shape)
+
         # Space
-        self.obs_space = Box(
-            -np.inf,
-            np.inf,
-            shape=(
-                self.num_agents,
-                self.obs_dim,
-            ),
-        )
+        self.obs_space = Box(-np.inf, np.inf, shape=(self.obs_dim, ))
         self.state_space = Box(-np.inf, np.inf, shape=(self.state_dim, ))
         self.action_space = Discrete(self.n_actions)
 
         # Multi-Agent Sapces
         self.obs_spaces: dict[AgentID, gym.spaces.Space] = {}
+        self.state_spaces: dict[AgentID, gym.spaces.Space] = {}
         self.action_spaces: dict[AgentID, gym.spaces.Space] = {}
         for agent_id in self.agents:
-            self.obs_spaces[agent_id] = Box(
-                -np.inf,
-                np.inf,
-                shape=(self.obs_dim, ),
-            )
+            self.obs_spaces[agent_id] = Box(-np.inf,
+                                            np.inf,
+                                            shape=(self.obs_dim, ))
+            self.state_spaces[agent_id] = Box(-np.inf,
+                                              np.inf,
+                                              shape=(self.state_dim, ))
             self.action_spaces[agent_id] = Discrete(self.n_actions)
 
         # Max episode steps
@@ -135,7 +144,7 @@ class SMACWrapperEnv(object):
             agents_id_one_hot.append(one_hot)
         return np.array(agents_id_one_hot)
 
-    def get_actions_one_hot(self, actions: List[int]):
+    def get_actions_one_hot(self, actions: Union[List[int], None] = None):
         """Get the one-hot encoding of the actions.
 
         Args:
@@ -145,56 +154,57 @@ class SMACWrapperEnv(object):
             np.ndarray: Shape : (num_agents, n_actions)
                 One-hot encoding of the actions.
         """
-        actions_one_hot = []
-        for action in actions:
-            one_hot = self.actions_one_hot_transform(action)
-            actions_one_hot.append(one_hot)
-        return np.array(actions_one_hot)
+        if actions is None:
+            return np.zeros((self.num_agents, self.n_actions))
+        else:
+            actions_one_hot = []
+            for action in actions:
+                one_hot = self.actions_one_hot_transform(action)
+                actions_one_hot.append(one_hot)
+            return np.array(actions_one_hot)
 
-    def get_actor_input_shape(
-        self,
-        use_global_state: bool = False,
-        use_last_action: bool = False,
-        use_agent_id_onehot: bool = False,
-    ) -> None:
-        """Get the input shape of the actor model.
+    def get_actor_input_dim(self) -> None:
+        """Get the input dim of the actor model.
 
         Args:
             args (argparse.Namespace): The arguments
         Returns:
-            input_shape (int): The input shape of the actor model.
+            input_dim (int): The input dim of the actor model.
         """
-        input_shape = self.obs_dim
-        if use_global_state:
-            input_shape += self.state_shape
-        if use_last_action:
-            input_shape += self.n_actions
-        if use_agent_id_onehot:
-            input_shape += self.num_agents
-        return input_shape
+        input_dim = self.obs_dim
+        if self.args.use_global_state:
+            input_dim += self.state_dim
+        if self.args.use_last_actions:
+            input_dim += self.n_actions
+        if self.args.use_agents_id_onehot:
+            input_dim += self.num_agents
+        return input_dim
 
-    def get_critic_input_shape(
-        self,
-        use_global_state: bool = False,
-        use_last_action: bool = False,
-        use_agent_id_onehot: bool = False,
-    ) -> None:
-        """Get the input shape of the critic model.
+    def get_actor_input_shape(self) -> None:
+        input_dim = self.get_actor_input_dim()
+        return (input_dim, )
+
+    def get_critic_input_dim(self) -> None:
+        """Get the input dim of the critic model.
 
         Args:
             args (argparse.Namespace): The arguments.
 
         Returns:
-            input_shape (int): The input shape of the critic model.
+            input_dim (int): The input dim of the critic model.
         """
-        input_shape = self.obs_shape
-        if use_global_state:
-            input_shape += self.state_shape
-        if use_last_action:
-            input_shape += self.n_actions
-        if use_agent_id_onehot:
-            input_shape += self.num_agents
-        return input_shape
+        input_dim = self.obs_dim
+        if self.args.use_global_state:
+            input_dim += self.state_dim
+        if self.args.use_last_actions:
+            input_dim += self.n_actions
+        if self.args.use_agents_id_onehot:
+            input_dim += self.num_agents
+        return input_dim
+
+    def get_critic_input_shape(self) -> None:
+        input_dim = self.get_critic_input_dim()
+        return (input_dim, )
 
     def close(self):
         """Close the environment."""
@@ -207,6 +217,22 @@ class SMACWrapperEnv(object):
         - mode: Rendering mode.
         """
         return self.env.render(mode)
+
+    def build_actor_inputs(
+        self,
+        obs: np.array,
+        state: np.array,
+        last_actions: np.array,
+        agents_id_onehot: np.array,
+    ) -> np.array:
+        inputs = obs
+        if self.args.use_global_state:
+            inputs = np.concatenate([inputs, state], axis=-1)
+        if self.args.use_last_actions:
+            inputs = np.concatenate([inputs, last_actions], axis=-1)
+        if self.args.use_agents_id_onehot:
+            inputs = np.concatenate([inputs, agents_id_onehot], axis=-1)
+        return inputs
 
     def reset(self, seed: int = None):
         """Reset the environment.
@@ -229,6 +255,14 @@ class SMACWrapperEnv(object):
             'episode_step': self._episode_step,
             'episode_score': self._episode_score,
         }
+        last_actions = self.get_actions_one_hot()
+        agents_id_onehot = self.get_agents_id_one_hot()
+        obs = self.build_actor_inputs(
+            obs=np.array(obs),
+            state=np.array(state),
+            last_actions=last_actions,
+            agents_id_onehot=agents_id_onehot,
+        )
         return np.array(obs), np.array(state), info
 
     def step(self, actions: Union[np.ndarray, List[int]]) -> Tuple:
@@ -256,6 +290,15 @@ class SMACWrapperEnv(object):
         info['episode_score'] = self._episode_score
 
         truncated = True if self._episode_step >= self.episode_limit else False
+
+        last_actions = self.get_actions_one_hot()
+        agents_id_onehot = self.get_agents_id_one_hot()
+        obs = self.build_actor_inputs(
+            obs=np.array(obs),
+            state=np.array(state),
+            last_actions=last_actions,
+            agents_id_onehot=agents_id_onehot,
+        )
         return (
             np.array(obs),
             np.array(state),
@@ -283,7 +326,7 @@ class SMACWrapperEnv(object):
         """
         return self.action_spaces[agent]
 
-    def get_env_info(self):
+    def get_env_info(self) -> dict[str, Any]:
         """Get the environment information."""
         env_info = {
             'obs_shape': self.obs_shape,

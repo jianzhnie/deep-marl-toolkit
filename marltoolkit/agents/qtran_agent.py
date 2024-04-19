@@ -33,10 +33,10 @@ class QTranAgent(object):
         gamma: float = 0.99,
         learning_rate: float = 0.0005,
         min_learning_rate: float = 0.00001,
-        exploration_start: float = 1.0,
+        egreedy_exploration: float = 1.0,
         min_exploration: float = 0.01,
-        update_target_interval: int = 100,
-        update_learner_freq: int = 1,
+        target_update_interval: int = 100,
+        learner_update_freq: int = 1,
         clip_grad_norm: float = 10,
         optim_alpha: float = 0.99,
         optim_eps: float = 0.00001,
@@ -58,11 +58,11 @@ class QTranAgent(object):
         self.min_learning_rate = min_learning_rate
         self.clip_grad_norm = clip_grad_norm
         self.global_steps = 0
-        self.exploration = exploration_start
+        self.exploration = egreedy_exploration
         self.min_exploration = min_exploration
         self.target_update_count = 0
-        self.update_target_interval = update_target_interval
-        self.update_learner_freq = update_learner_freq
+        self.target_update_interval = target_update_interval
+        self.learner_update_freq = learner_update_freq
         self.opt_loss_coef = opt_loss_coef
         self.nopt_min_loss_coef = nopt_min_loss_coef
 
@@ -83,7 +83,7 @@ class QTranAgent(object):
                                              alpha=optim_alpha,
                                              eps=optim_eps)
 
-        self.ep_scheduler = LinearDecayScheduler(exploration_start,
+        self.ep_scheduler = LinearDecayScheduler(egreedy_exploration,
                                                  total_steps * 0.8)
 
         lr_steps = [total_steps * 0.5, total_steps * 0.8]
@@ -165,7 +165,7 @@ class QTranAgent(object):
             mean_td_error (float): train TD error
         '''
         # update target model
-        if self.global_steps % self.update_target_interval == 0:
+        if self.global_steps % self.target_update_interval == 0:
             self.update_target()
             self.target_update_count += 1
 

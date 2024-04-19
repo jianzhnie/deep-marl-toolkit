@@ -13,11 +13,11 @@ class EpisodeData:
         self,
         num_agents: int,
         episode_limit: int,
-        obs_space: Union[int, Tuple],
-        state_space: Union[int, Tuple],
-        action_space: Union[int, Tuple],
-        reward_space: Union[int, Tuple],
-        done_space: Union[int, Tuple],
+        obs_shape: Union[int, Tuple],
+        state_shape: Union[int, Tuple],
+        action_shape: Union[int, Tuple],
+        reward_shape: Union[int, Tuple],
+        done_shape: Union[int, Tuple],
         **kwargs,
     ) -> None:
         """Initialize EpisodeData.
@@ -26,18 +26,18 @@ class EpisodeData:
         - num_agents (int): Number of agents.
         - num_actions (int): Number of possible actions.
         - episode_limit (int): Maximum number of steps in an episode.
-        - obs_space (Union[int, Tuple]): Shape of the observation.
-        - state_space (Union[int, Tuple]): Shape of the state.
+        - obs_shape (Union[int, Tuple]): Shape of the observation.
+        - state_shape (Union[int, Tuple]): Shape of the state.
         """
         self.num_agents = num_agents
         self.episode_limit = episode_limit
-        self.obs_space = obs_space
-        self.state_space = state_space
-        self.action_space = action_space
-        self.reward_space = reward_space
-        self.done_space = done_space
+        self.obs_shape = obs_shape
+        self.state_shape = state_shape
+        self.action_shape = action_shape
+        self.reward_shape = reward_shape
+        self.done_shape = done_shape
 
-        if self.state_space is not None:
+        if self.state_shape is not None:
             self.store_global_state = True
         else:
             self.store_global_state = False
@@ -51,43 +51,36 @@ class EpisodeData:
     def reset(self):
         self.episode_buffer = dict(
             obs=np.zeros(
-                (self.episode_limit, ) + self.obs_space,
+                (self.episode_limit, self.num_agents) + self.obs_shape,
                 dtype=np.float32,
             ),
             actions=np.zeros(
                 (self.episode_limit, ) + (self.num_agents, ),
                 dtype=np.int8,
             ),
-            last_actions=np.zeros(
-                (
-                    self.episode_limit,
-                    self.num_agents,
-                ) + self.action_space,
-                dtype=np.int8,
-            ),
             available_actions=np.zeros(
                 (
                     self.episode_limit,
                     self.num_agents,
-                ) + self.action_space,
+                ) + self.action_shape,
                 dtype=np.int8,
             ),
             rewards=np.zeros(
-                (self.episode_limit, ) + self.reward_space,
+                (self.episode_limit, ) + self.reward_shape,
                 dtype=np.float32,
             ),
             dones=np.zeros(
-                (self.episode_limit, ) + self.done_space,
+                (self.episode_limit, ) + self.done_shape,
                 dtype=np.bool_,
             ),
             filled=np.zeros(
-                (self.episode_limit, ) + self.done_space,
+                (self.episode_limit, ) + self.done_shape,
                 dtype=np.bool_,
             ),
         )
         if self.store_global_state:
             self.episode_buffer['state'] = np.zeros(
-                (self.episode_limit, ) + self.state_space,
+                (self.episode_limit, ) + self.state_shape,
                 dtype=np.float32,
             )
 
@@ -103,7 +96,6 @@ class EpisodeData:
             - obs (np.ndarray): Observation data.
             - state (np.ndarray): State data.
             - actions (np.ndarray): Actions taken.
-            - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
             - dones (np.ndarray): Termination flag.
@@ -159,11 +151,11 @@ class ReplayBuffer:
         max_size: int,
         num_agents: int,
         episode_limit: int,
-        obs_space: Union[int, Tuple],
-        state_space: Union[int, Tuple],
-        action_space: Union[int, Tuple],
-        reward_space: Union[int, Tuple],
-        done_space: Union[int, Tuple],
+        obs_shape: Union[int, Tuple],
+        state_shape: Union[int, Tuple],
+        action_shape: Union[int, Tuple],
+        reward_shape: Union[int, Tuple],
+        done_shape: Union[int, Tuple],
         device: Union[torch.device, str] = 'cpu',
     ) -> None:
         """Initialize MaReplayBuffer.
@@ -173,21 +165,21 @@ class ReplayBuffer:
         - num_agents (int): Number of agents.
         - num_actions (int): Number of possible actions.
         - episode_limit (int): Maximum number of steps in an episode.
-        - obs_space (Union[int, Tuple]): Shape of the observation.
-        - state_space (Union[int, Tuple]): Shape of the state.
+        - obs_shape (Union[int, Tuple]): Shape of the observation.
+        - state_shape (Union[int, Tuple]): Shape of the state.
         - device (str): Device for PyTorch tensors ('cpu' or 'cuda').
         """
         self.max_size = max_size
         self.num_agents = num_agents
         self.episode_limit = episode_limit
-        self.obs_space = obs_space
-        self.state_space = state_space
-        self.action_space = action_space
-        self.reward_space = reward_space
-        self.done_space = done_space
+        self.obs_shape = obs_shape
+        self.state_shape = state_shape
+        self.action_shape = action_shape
+        self.reward_shape = reward_shape
+        self.done_shape = done_shape
         self.device = device
 
-        if self.state_space is not None:
+        if self.state_shape is not None:
             self.store_global_state = True
         else:
             self.store_global_state = False
@@ -201,11 +193,11 @@ class ReplayBuffer:
         self.episode_data = EpisodeData(
             num_agents,
             episode_limit,
-            obs_space,
-            state_space,
-            action_space,
-            reward_space,
-            done_space,
+            obs_shape,
+            state_shape,
+            action_shape,
+            reward_shape,
+            done_shape,
         )
 
     def reset(self) -> None:
@@ -214,7 +206,8 @@ class ReplayBuffer:
                 (
                     self.max_size,
                     self.episode_limit,
-                ) + self.obs_space,
+                    self.num_agents,
+                ) + self.obs_shape,
                 dtype=np.float32,
             ),
             actions=np.zeros(
@@ -224,41 +217,33 @@ class ReplayBuffer:
                 ) + (self.num_agents, ),
                 dtype=np.int8,
             ),
-            last_actions=np.zeros(
-                (
-                    self.max_size,
-                    self.episode_limit,
-                    self.num_agents,
-                ) + self.action_space,
-                dtype=np.int8,
-            ),
             available_actions=np.zeros(
                 (
                     self.max_size,
                     self.episode_limit,
                     self.num_agents,
-                ) + self.action_space,
+                ) + self.action_shape,
                 dtype=np.int8,
             ),
             rewards=np.zeros(
                 (
                     self.max_size,
                     self.episode_limit,
-                ) + self.reward_space,
+                ) + self.reward_shape,
                 dtype=np.float32,
             ),
             dones=np.zeros(
                 (
                     self.max_size,
                     self.episode_limit,
-                ) + self.done_space,
+                ) + self.done_shape,
                 dtype=np.bool_,
             ),
             filled=np.zeros(
                 (
                     self.max_size,
                     self.episode_limit,
-                ) + self.done_space,
+                ) + self.done_shape,
                 dtype=np.bool_,
             ),
         )
@@ -267,7 +252,7 @@ class ReplayBuffer:
                 (
                     self.max_size,
                     self.episode_limit,
-                ) + self.state_space,
+                ) + self.state_shape,
                 dtype=np.float32,
             )
 
@@ -284,7 +269,6 @@ class ReplayBuffer:
             - obs (np.ndarray): Observation data.
             - state (np.ndarray): State data.
             - actions (np.ndarray): Actions taken.
-            - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
             - dones (np.ndarray): Termination flag.
@@ -307,7 +291,6 @@ class ReplayBuffer:
             - obs (np.ndarray): Observation data.
             - state (np.ndarray): State data.
             - actions (np.ndarray): Actions taken.
-            - last_actions (np.ndarray): Actions in one-hot encoding.
             - available_actions (np.ndarray): Available actions for each agent.
             - rewards (np.ndarray): Reward received.
             - dones (np.ndarray): Termination flag.
