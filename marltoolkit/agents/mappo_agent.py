@@ -123,9 +123,9 @@ class MAPPOAgent(BaseAgent):
     ):
         """Get value function predictions.
 
-        :param state (np.ndarray): centralized input to the critic.
-        :param masks: (np.ndarray) denotes points at which RNN states should be reset.
-        :param critic_rnn_states: (np.ndarray) if critic is RNN, RNN states for critic.
+        :param state (torch.Tensor): centralized input to the critic.
+        :param masks: (torch.Tensor) denotes points at which RNN states should be reset.
+        :param critic_rnn_states: (torch.Tensor) if critic is RNN, RNN states for critic.
 
         :return values: (torch.Tensor) value function predictions.
         """
@@ -146,15 +146,15 @@ class MAPPOAgent(BaseAgent):
         """Get action logprobs / entropy and value function predictions for
         actor update.
 
-        :param obs (np.ndarray): local agent inputs to the actor.
-        :param state (np.ndarray): centralized input to the critic.
-        :param action: (np.ndarray) actions whose log probabilites and entropy to compute.
-        :param masks: (np.ndarray) denotes points at which RNN states should be reset.
+        :param obs (torch.Tensor): local agent inputs to the actor.
+        :param state (torch.Tensor): centralized input to the critic.
+        :param action: (torch.Tensor) actions whose log probabilites and entropy to compute.
+        :param masks: (torch.Tensor) denotes points at which RNN states should be reset.
         :param active_masks: (torch.Tensor) denotes whether an agent is active or dead.
-        :param available_actions: (np.ndarray) denotes which actions are available to agent
+        :param available_actions: (torch.Tensor) denotes which actions are available to agent
                                   (if None, all actions available)
-        :param actor_rnn_states: (np.ndarray) if actor is RNN, RNN states for actor.
-        :param critic_rnn_states: (np.ndarray) if critic is RNN, RNN states for critic.
+        :param actor_rnn_states: (torch.Tensor) if actor is RNN, RNN states for actor.
+        :param critic_rnn_states: (torch.Tensor) if critic is RNN, RNN states for critic.
 
 
         :return values: (torch.Tensor) value function predictions.
@@ -162,19 +162,10 @@ class MAPPOAgent(BaseAgent):
         :return dist_entropy: (torch.Tensor) action distribution entropy for the given inputs.
         """
         action_log_probs, dist_entropy = self.actor_model.evaluate_actions(
-            obs,
-            action,
-            masks,
-            active_masks,
-            available_actions,
-            actor_rnn_states,
-        )
+            obs, action, masks, active_masks, available_actions,
+            actor_rnn_states)
 
-        values, _ = self.critic_model.forward(
-            state,
-            masks,
-            critic_rnn_states,
-        )
+        values, _ = self.critic_model.forward(state, masks, critic_rnn_states)
         return values, action_log_probs, dist_entropy
 
     def act(
@@ -187,10 +178,10 @@ class MAPPOAgent(BaseAgent):
     ):
         """Compute actions using the given inputs.
 
-        :param obs (np.ndarray): local agent inputs to the actor.
-        :param actor_rnn_states: (np.ndarray) if actor is RNN, RNN states for actor.
-        :param masks: (np.ndarray) denotes points at which RNN states should be reset.
-        :param available_actions: (np.ndarray) denotes which actions are available to agent
+        :param obs (torch.Tensor): local agent inputs to the actor.
+        :param actor_rnn_states: (torch.Tensor) if actor is RNN, RNN states for actor.
+        :param masks: (torch.Tensor) denotes points at which RNN states should be reset.
+        :param available_actions: (torch.Tensor) denotes which actions are available to agent
                                   (if None, all actions available)
         :param deterministic: (bool) whether the action should be mode of distribution or should be sampled.
         """
@@ -337,11 +328,11 @@ class MAPPOAgent(BaseAgent):
         self.critic_optimizer.step()
 
         return (
-            value_loss,
-            critic_grad_norm,
             policy_loss,
+            value_loss,
             dist_entropy,
             actor_grad_norm,
+            critic_grad_norm,
             imp_weights,
         )
 
@@ -384,16 +375,16 @@ class MAPPOAgent(BaseAgent):
 
             for batch_data in data_generator:
                 (
-                    value_loss,
-                    critic_grad_norm,
                     policy_loss,
+                    value_loss,
                     dist_entropy,
                     actor_grad_norm,
+                    critic_grad_norm,
                     imp_weights,
                 ) = self.ppo_update(batch_data, update_actor)
 
-                train_info['value_loss'] += value_loss.item()
                 train_info['policy_loss'] += policy_loss.item()
+                train_info['value_loss'] += value_loss.item()
                 train_info['dist_entropy'] += dist_entropy.item()
                 train_info['actor_grad_norm'] += actor_grad_norm
                 train_info['critic_grad_norm'] += critic_grad_norm
@@ -405,3 +396,11 @@ class MAPPOAgent(BaseAgent):
             train_info[k] /= num_updates
 
         return train_info
+
+    def prep_training(self):
+        self.actor_model.train()
+        self.critic_model.train()
+
+    def prep_rollout(self):
+        self.actor_model.eval()
+        self.critic_model.eval()
