@@ -16,16 +16,13 @@ class MAPPOAgent(BaseAgent):
     """MAPPO Policy  class. Wraps actor and critic networks to compute actions
     and value function predictions.
 
-    :param args: (argparse.Namespace) arguments containing relevant model and policy information.
-    :param obs_space: (gym.Space) observation space.
-    :param state_space: (gym.Space) value function input space (centralized input for MAPPO, decentralized for IPPO).
-    :param action_space: (gym.Space) action space.
-    :param device: (torch.device) specifies the device to run on (cpu/gpu).
+    Args:
+        args (argparse.Namespace): Arguments containing relevant model and policy information.
     """
 
     def __init__(self, args: argparse.Namespace) -> None:
+        # Initialize hyperparameters and other parameters
         self.device = args.device
-
         self.actor_lr = args.actor_lr
         self.critic_lr = args.critic_lr
         self.opti_eps = args.opti_eps
@@ -52,6 +49,8 @@ class MAPPOAgent(BaseAgent):
         self.use_value_active_masks = args.use_value_active_masks
         self.use_policy_active_masks = args.use_policy_active_masks
 
+        # Initialize actor and critic networks
+
         self.actor_model: R_Actor = R_Actor(args).to(self.device)
         self.critic_model: R_Critic = R_Critic(args).to(self.device)
 
@@ -66,6 +65,7 @@ class MAPPOAgent(BaseAgent):
         else:
             self.value_normalizer = None
 
+        # Initialize optimizers
         self.actor_optimizer = torch.optim.Adam(
             self.actor_model.parameters(),
             lr=self.actor_lr,
@@ -92,14 +92,14 @@ class MAPPOAgent(BaseAgent):
         """Compute actions and value function predictions for the given inputs.
 
         Args:
-            :param obs (np.ndarray): local agent inputs to the actor.
-            :param state (np.ndarray): centralized input to the critic.
-            :param masks: (np.ndarray) denotes points at which RNN states should be reset.
-            :param available_actions: (np.ndarray) denotes which actions are available to agent
-                                    (if None, all actions available)
-            :param actor_rnn_states: (np.ndarray) if actor is RNN, RNN states for actor.
-            :param critic_rnn_states: (np.ndarray) if critic is RNN, RNN states for critic.
-            :param deterministic: (bool) whether the action should be mode of distribution or should be sampled.
+            obs (torch.Tensor): Local agent inputs to the actor.
+            state (torch.Tensor): Centralized input to the critic.
+            masks (torch.Tensor): Denotes points at which RNN states should be reset.
+            available_actions (torch.Tensor, optional): Denotes which actions are available to the agent.
+            actor_rnn_states (torch.Tensor, optional): RNN states for the actor network.
+            critic_rnn_states (torch.Tensor, optional): RNN states for the critic network.
+            deterministic (bool, optional): Whether the action should be deterministic or sampled.
+
 
         Return:
             :return values: (torch.Tensor) value function predictions.
@@ -285,8 +285,8 @@ class MAPPOAgent(BaseAgent):
             state_batch,
             actions_batch,
             masks_batch,
-            available_actions_batch,
             active_masks_batch,
+            available_actions_batch,
             rnn_states_batch,
             rnn_states_critic_batch,
         )
@@ -345,7 +345,7 @@ class MAPPOAgent(BaseAgent):
             imp_weights,
         )
 
-    def learn(self, buffer, update_actor=True):
+    def learn(self, buffer, update_actor: bool = True):
         """Perform a training update using minibatch GD.
 
         :param buffer: (SharedReplayBuffer) buffer containing training data.

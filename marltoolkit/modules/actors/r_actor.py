@@ -74,8 +74,8 @@ class R_Actor(nn.Module):
         obs: torch.Tensor,
         action: torch.Tensor,
         masks: torch.Tensor,
-        available_actions: torch.Tensor = None,
         active_masks: torch.Tensor = None,
+        available_actions: torch.Tensor = None,
         rnn_hidden_states: torch.Tensor = None,
     ):
         """Compute log probability and entropy of given actions.
