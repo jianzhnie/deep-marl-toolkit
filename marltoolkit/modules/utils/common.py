@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Tuple
 
 import torch
 import torch.nn as nn
@@ -24,7 +24,6 @@ class MLPBase(nn.Module):
             init_method = nn.init.xavier_uniform_
 
         gain = nn.init.calculate_gain(['tanh', 'relu'][use_relu])
-        self.use_orthogonal = use_orthogonal
         self.use_feature_normalization = use_feature_normalization
         if use_feature_normalization:
             self.feature_norm = nn.LayerNorm(input_dim)
@@ -41,9 +40,9 @@ class MLPBase(nn.Module):
                                  nn.LayerNorm(hidden_dim))
         self.apply(init_weight)
 
-    def forward(self, input: torch.Tensor):
+    def forward(self, inputs: torch.Tensor):
         if self.use_feature_normalization:
-            output = self.feature_norm(input)
+            output = self.feature_norm(inputs)
 
         output = self.fc1(output)
         output = self.fc2(output)
@@ -51,7 +50,66 @@ class MLPBase(nn.Module):
         return output
 
 
-class RNNBase(nn.Module):
+class Flatten(nn.Module):
+
+    def forward(self, inputs: torch.Tensor):
+        return inputs.view(inputs.size(0), -1)
+
+
+class CNNBase(nn.Module):
+
+    def __init__(
+        self,
+        obs_shape: Tuple,
+        hidden_dim: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        activation: str = 'relu',
+        use_orthogonal: bool = False,
+    ) -> None:
+        super(CNNBase, self).__init__()
+
+        use_relu = 1 if activation == 'relu' else 0
+        active_func = [nn.ReLU(), nn.Tanh()][use_relu]
+        init_method = [nn.init.xavier_uniform_,
+                       nn.init.orthogonal_][use_orthogonal]
+        gain = nn.init.calculate_gain(['tanh', 'relu'][use_relu])
+
+        (in_channel, width, height) = obs_shape
+
+        def init_weight(module: nn.Module) -> None:
+            if isinstance(module, nn.Linear):
+                init_method(module.weight, gain=gain)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+
+        self.cnn = nn.Sequential(
+            nn.Conv2d(
+                in_channels=in_channel,
+                out_channels=hidden_dim // 2,
+                kernel_size=kernel_size,
+                stride=stride,
+            ),
+            active_func,
+            Flatten(),
+            nn.Linear(
+                hidden_dim // 2 * (width - kernel_size + stride) *
+                (height - kernel_size + stride),
+                hidden_dim,
+            ),
+            active_func,
+            nn.Linear(hidden_dim, hidden_dim),
+            active_func,
+        )
+        self.apply(init_weight)
+
+    def forward(self, inputs: torch.Tensor):
+        inputs = inputs / 255.0
+        output = self.cnn(inputs)
+        return output
+
+
+class RNNLayer(nn.Module):
 
     def __init__(
         self,
@@ -60,7 +118,7 @@ class RNNBase(nn.Module):
         rnn_layers: int,
         use_orthogonal: bool = True,
     ) -> None:
-        super(RNNBase, self).__init__()
+        super(RNNLayer, self).__init__()
         self.rnn_layers = rnn_layers
         self.use_orthogonal = use_orthogonal
 
@@ -77,23 +135,23 @@ class RNNBase(nn.Module):
 
     def forward(
         self,
-        input: torch.Tensor,
+        inputs: torch.Tensor,
         hidden_state: torch.Tensor,
         masks: torch.Tensor,
     ) -> tuple[Any, torch.Tensor]:
-        if input.size(0) == hidden_state.size(0):
-            input = input.unsqueeze(0)
+        if inputs.size(0) == hidden_state.size(0):
+            inputs = inputs.unsqueeze(0)
             hidden_state = (hidden_state * masks.repeat(
                 1, self.rnn_layers).unsqueeze(-1).transpose(0, 1).contiguous())
-            output, hidden_state = self.rnn(input, hidden_state)
+            output, hidden_state = self.rnn(inputs, hidden_state)
             output = output.squeeze(0)
             hidden_state = hidden_state.transpose(0, 1)
         else:
             # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
             N = hidden_state.size(0)
-            T = int(input.size(0) / N)
+            T = int(inputs.size(0) / N)
             # unflatten
-            input = input.view(T, N, input.size(1))
+            inputs = inputs.view(T, N, inputs.size(1))
             # Same deal with masks
             masks = masks.view(T, N)
             # Let's figure out which steps in the sequence have a zero for any agent
@@ -121,17 +179,17 @@ class RNNBase(nn.Module):
                 end_idx = has_zeros[i + 1]
                 temp = (hidden_state * masks[start_idx].view(1, -1, 1).repeat(
                     self.rnn_layers, 1, 1)).contiguous()
-                rnn_scores, hidden_state = self.rnn(input[start_idx:end_idx],
+                rnn_scores, hidden_state = self.rnn(inputs[start_idx:end_idx],
                                                     temp)
                 outputs.append(rnn_scores)
 
             # assert len(outputs) == T
             # x is a (T, N, -1) tensor
-            input = torch.cat(outputs, dim=0)
+            inputs = torch.cat(outputs, dim=0)
 
             # flatten
-            input = input.reshape(T * N, -1)
+            inputs = inputs.reshape(T * N, -1)
             hidden_state = hidden_state.transpose(0, 1)
 
-        output = self.layer_norm(input)
+        output = self.layer_norm(inputs)
         return output, hidden_state
