@@ -356,7 +356,7 @@ def get_common_args() -> argparse.Namespace:
     )
     parser.add_argument('--rnn_layers',
                         type=int,
-                        default=1,
+                        default=2,
                         help='The number of recurrent layers.')
     parser.add_argument(
         '--data_chunk_length',
