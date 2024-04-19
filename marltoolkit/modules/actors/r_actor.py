@@ -39,49 +39,50 @@ class R_Actor(nn.Module):
     def forward(
         self,
         obs: torch.Tensor,
-        rnn_states: torch.Tensor,
         masks: torch.Tensor,
         available_actions: torch.Tensor = None,
+        rnn_hidden_states: torch.Tensor = None,
         deterministic: bool = False,
     ):
         """Compute actions from the given inputs.
 
         :param obs: (np.ndarray / torch.Tensor) observation inputs into network.
-        :param rnn_states: (np.ndarray / torch.Tensor) if RNN network, hidden states for RNN.
         :param masks: (np.ndarray / torch.Tensor) mask tensor denoting if hidden states should be reinitialized to zeros.
         :param available_actions: (np.ndarray / torch.Tensor) denotes which actions are available to agent
                                                               (if None, all actions available)
+        :param rnn_hidden_states: (np.ndarray / torch.Tensor) if RNN network, hidden states for RNN.
+
         :param deterministic: (bool) whether to sample from action distribution or return the mode.
 
         :return actions: (torch.Tensor) actions to take.
         :return action_log_probs: (torch.Tensor) log probabilities of taken actions.
-        :return rnn_states: (torch.Tensor) updated RNN hidden states.
+        :return rnn_hidden_states: (torch.Tensor) updated RNN hidden states.
         """
         actor_features = self.base(obs)
 
         if self.use_recurrent_policy:
-            actor_features, rnn_states = self.rnn(actor_features, rnn_states,
-                                                  masks)
+            actor_features, rnn_hidden_states = self.rnn(
+                actor_features, rnn_hidden_states, masks)
 
         actions, action_log_probs = self.act(actor_features, available_actions,
                                              deterministic)
 
-        return actions, action_log_probs, rnn_states
+        return actions, action_log_probs, rnn_hidden_states
 
     def evaluate_actions(
         self,
         obs: torch.Tensor,
-        rnn_states: torch.Tensor,
         action: torch.Tensor,
         masks: torch.Tensor,
         available_actions: torch.Tensor = None,
         active_masks: torch.Tensor = None,
+        rnn_hidden_states: torch.Tensor = None,
     ):
         """Compute log probability and entropy of given actions.
 
         :param obs: (torch.Tensor) observation inputs into network.
         :param action: (torch.Tensor) actions whose entropy and log probability to evaluate.
-        :param rnn_states: (torch.Tensor) if RNN network, hidden states for RNN.
+        :param rnn_hidden_states: (torch.Tensor) if RNN network, hidden states for RNN.
         :param masks: (torch.Tensor) mask tensor denoting if hidden states should be reinitialized to zeros.
         :param available_actions: (torch.Tensor) denotes which actions are available to agent
                                                               (if None, all actions available)
@@ -93,8 +94,8 @@ class R_Actor(nn.Module):
         actor_features = self.base(obs)
 
         if self.use_recurrent_policy:
-            actor_features, rnn_states = self.rnn(actor_features, rnn_states,
-                                                  masks)
+            actor_features, rnn_hidden_states = self.rnn(
+                actor_features, rnn_hidden_states, masks)
 
         if self.algorithm_name == 'hatrpo':
             action_log_probs, dist_entropy, action_mu, action_std, all_probs = (

@@ -51,21 +51,21 @@ class R_Critic(nn.Module):
     def forward(
         self,
         state: torch.Tensor,
-        rnn_states: torch.Tensor,
         masks: torch.Tensor,
+        rnn_hidden_states: torch.Tensor,
     ):
         """Compute actions from the given inputs.
 
         :param state: (np.ndarray / torch.Tensor) global observation inputs into network.
-        :param rnn_states: (np.ndarray / torch.Tensor) if RNN network, hidden states for RNN.
         :param masks: (np.ndarray / torch.Tensor) mask tensor denoting if RNN states should be reinitialized to zeros.
+        :param rnn_hidden_states: (np.ndarray / torch.Tensor) if RNN network, hidden states for RNN.
 
         :return values: (torch.Tensor) value function predictions.
-        :return rnn_states: (torch.Tensor) updated RNN hidden states.
+        :return rnn_hidden_states: (torch.Tensor) updated RNN hidden states.
         """
         critic_features = self.base(state)
         if self.use_recurrent_policy:
-            critic_features, rnn_states = self.rnn(critic_features, rnn_states,
-                                                   masks)
+            critic_features, rnn_hidden_states = self.rnn(
+                critic_features, rnn_hidden_states, masks)
         values = self.v_out(critic_features)
-        return values, rnn_states
+        return values, rnn_hidden_states
