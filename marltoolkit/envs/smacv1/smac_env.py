@@ -163,39 +163,47 @@ class SMACWrapperEnv(object):
                 actions_one_hot.append(one_hot)
             return np.array(actions_one_hot)
 
-    def get_actor_input_shape(self) -> None:
-        """Get the input shape of the actor model.
+    def get_actor_input_dim(self) -> None:
+        """Get the input dim of the actor model.
 
         Args:
             args (argparse.Namespace): The arguments
         Returns:
-            input_shape (int): The input shape of the actor model.
+            input_dim (int): The input dim of the actor model.
         """
         input_dim = self.obs_dim
         if self.args.use_global_state:
-            input_dim += self.state_shape
+            input_dim += self.state_dim
         if self.args.use_last_actions:
             input_dim += self.n_actions
         if self.args.use_agents_id_onehot:
             input_dim += self.num_agents
+        return input_dim
+
+    def get_actor_input_shape(self) -> None:
+        input_dim = self.get_actor_input_dim()
         return (input_dim, )
 
-    def get_critic_input_shape(self) -> None:
-        """Get the input shape of the critic model.
+    def get_critic_input_dim(self) -> None:
+        """Get the input dim of the critic model.
 
         Args:
             args (argparse.Namespace): The arguments.
 
         Returns:
-            input_shape (int): The input shape of the critic model.
+            input_dim (int): The input dim of the critic model.
         """
-        input_dim = self.obs_shape
+        input_dim = self.obs_dim
         if self.args.use_global_state:
-            input_dim += self.state_shape
+            input_dim += self.state_dim
         if self.args.use_last_actions:
             input_dim += self.n_actions
         if self.args.use_agents_id_onehot:
             input_dim += self.num_agents
+        return input_dim
+
+    def get_critic_input_shape(self) -> None:
+        input_dim = self.get_critic_input_dim()
         return (input_dim, )
 
     def close(self):

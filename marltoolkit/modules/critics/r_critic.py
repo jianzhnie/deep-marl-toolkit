@@ -20,9 +20,9 @@ class R_Critic(nn.Module):
         super(R_Critic, self).__init__()
         self.use_recurrent_policy = args.use_recurrent_policy
         init_method = [nn.init.xavier_uniform_,
-                       nn.init.orthogonal_][self.use_orthogonal]
+                       nn.init.orthogonal_][args.use_orthogonal]
         self.base = MLPBase(
-            input_dim=args.input_dim,
+            input_dim=args.state_dim,
             hidden_dim=args.hidden_size,
             use_orthogonal=args.use_orthogonal,
             use_feature_normalization=args.use_feature_normalization,

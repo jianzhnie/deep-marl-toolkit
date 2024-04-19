@@ -36,8 +36,8 @@ class MLPBase(nn.Module):
 
         self.fc1 = nn.Sequential(nn.Linear(input_dim, hidden_dim), active_func,
                                  nn.LayerNorm(hidden_dim))
-        self.fc2 = nn.Sequential(nn.Linear(input_dim, hidden_dim), active_func,
-                                 nn.LayerNorm(hidden_dim))
+        self.fc2 = nn.Sequential(nn.Linear(hidden_dim, hidden_dim),
+                                 active_func, nn.LayerNorm(hidden_dim))
         self.apply(init_weight)
 
     def forward(self, inputs: torch.Tensor):

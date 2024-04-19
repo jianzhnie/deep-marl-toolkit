@@ -4,8 +4,6 @@ from typing import Tuple, Union
 import numpy as np
 import torch
 
-from .base_buffer import BaseBuffer
-
 
 def _flatten(T, N, x):
     return x.reshape(T * N, *x.shape[2:])
@@ -15,7 +13,7 @@ def _cast(x):
     return x.transpose(1, 2, 0, 3).reshape(-1, *x.shape[3:])
 
 
-class SharedReplayBuffer(BaseBuffer):
+class SharedReplayBuffer(object):
     """Buffer to store training data.
 
     :param args: (argparse.Namespace) arguments containing relevant model, policy, and env information.
@@ -37,16 +35,7 @@ class SharedReplayBuffer(BaseBuffer):
         done_shape: Union[int, Tuple],
         args: argparse.Namespace,
     ) -> None:
-        super(SharedReplayBuffer, self).__init__(
-            num_envs,
-            num_agents,
-            obs_shape,
-            state_shape,
-            action_shape,
-            reward_shape,
-            done_shape,
-            args,
-        )
+        super(SharedReplayBuffer, self).__init__()
         self.num_envs = num_envs
         self.num_agents = num_agents
         self.episode_limit = episode_limit
@@ -62,56 +51,54 @@ class SharedReplayBuffer(BaseBuffer):
         self.algorithm_name = args.algorithm_name
 
         self.obs = np.zeros(
-            (self.episode_limit + 1, self.num_envs, *obs_shape),
+            (self.episode_limit + 1, self.num_agents) + obs_shape,
             dtype=np.float32,
         )
         self.state = np.zeros(
-            (self.episode_limit + 1, self.num_envs, *state_shape),
+            (self.episode_limit + 1, ) + state_shape,
             dtype=np.float32,
         )
         self.actions = np.zeros(
-            (self.episode_limit, self.num_envs, num_agents),
+            (self.episode_limit, num_agents),
             dtype=np.float32,
         )
         self.rewards = np.zeros(
-            (self.episode_limit, self.num_envs, 1),
+            (self.episode_limit, 1),
             dtype=np.float32,
         )
         self.value_preds = np.zeros(
-            (self.episode_limit + 1, self.num_envs, 1),
+            (self.episode_limit + 1, 1),
             dtype=np.float32,
         )
         self.returns = np.zeros_like(self.value_preds)
         self.advantages = np.zeros(
-            (self.episode_limit, self.num_envs, 1),
+            (self.episode_limit, 1),
             dtype=np.float32,
         )
         self.action_log_probs = np.zeros(
-            (self.episode_limit, self.num_envs, action_shape),
+            (self.episode_limit, ) + action_shape,
             dtype=np.float32,
         )
         self.masks = np.ones(
-            (self.episode_limit + 1, self.num_envs, num_agents, 1),
+            (self.episode_limit + 1, num_agents, 1),
             dtype=np.float32,
         )
         self.bad_masks = np.ones_like(self.masks)
         self.active_masks = np.ones_like(self.masks)
         self.available_actions = np.zeros(
-            (self.episode_limit + 1, self.num_envs, num_agents, *action_shape),
+            (self.episode_limit + 1, num_agents) + action_shape,
             dtype=np.float32,
         )
-        self.rnn_hidden_states_actor = np.zeros(
+        self.rnn_states_actor = np.zeros(
             (
                 self.episode_limit + 1,
-                self.num_envs,
                 self.num_agents,
                 self.rnn_layers,
                 self.hidden_size,
             ),
             dtype=np.float32,
         )
-        self.rnn_hidden_states_critic = np.zeros_like(
-            self.rnn_hidden_states_actor)
+        self.rnn_states_critic = np.zeros_like(self.rnn_states_actor)
 
         self.curr_ptr = 0
         self.curr_size = 0
@@ -128,8 +115,8 @@ class SharedReplayBuffer(BaseBuffer):
         value_preds: np.ndarray,
         action_log_probs: np.ndarray,
         available_actions: np.ndarray,
-        rnn_hidden_states_actor: np.ndarray,
-        rnn_hidden_states_critic: np.ndarray,
+        rnn_states_actor: np.ndarray,
+        rnn_states_critic: np.ndarray,
     ) -> None:
         """Add the transitions data into the buffer.
 
@@ -143,8 +130,8 @@ class SharedReplayBuffer(BaseBuffer):
         :param value_preds: (np.ndarray) value prediction data.
         :param action_log_probs: (np.ndarray) action log probabilities.
         :param available_actions: (np.ndarray) available action data.
-        :param rnn_hidden_states_actor: (np.ndarray) rnn hidden states for actor.
-        :param rnn_hidden_states_critic: (np.ndarray) rnn hidden states for critic.
+        :param rnn_states_actor: (np.ndarray) rnn hidden states for actor.
+        :param rnn_states_critic: (np.ndarray) rnn hidden states for critic.
         """
         self.obs[self.curr_ptr + 1] = obs.copy()
         self.state[self.curr_ptr + 1] = state.copy()
@@ -153,10 +140,8 @@ class SharedReplayBuffer(BaseBuffer):
         self.masks[self.curr_ptr + 1] = masks.copy()
         self.value_preds[self.curr_ptr] = value_preds.copy()
         self.action_log_probs[self.curr_ptr] = action_log_probs.copy()
-        self.rnn_hidden_states_actor[self.curr_ptr +
-                                     1] = rnn_hidden_states_actor.copy()
-        self.rnn_hidden_states_critic[self.curr_ptr +
-                                      1] = (rnn_hidden_states_critic.copy())
+        self.rnn_states_actor[self.curr_ptr + 1] = rnn_states_actor.copy()
+        self.rnn_states_critic[self.curr_ptr + 1] = rnn_states_critic.copy()
 
         if bad_masks is not None:
             self.bad_masks[self.curr_ptr + 1] = bad_masks.copy()
@@ -178,10 +163,8 @@ class SharedReplayBuffer(BaseBuffer):
         self.masks[0] = self.masks[-1].copy()
         self.bad_masks[0] = self.bad_masks[-1].copy()
         self.active_masks[0] = self.active_masks[-1].copy()
-        self.rnn_hidden_states_actor[0] = self.rnn_hidden_states_actor[
-            -1].copy()
-        self.rnn_hidden_states_critic[0] = self.rnn_hidden_states_critic[
-            -1].copy()
+        self.rnn_states_actor[0] = self.rnn_states_actor[-1].copy()
+        self.rnn_states_critic[0] = self.rnn_states_critic[-1].copy()
         if self.available_actions is not None:
             self.available_actions[0] = self.available_actions[-1].copy()
 
@@ -338,10 +321,10 @@ class SharedReplayBuffer(BaseBuffer):
 
         state = self.state[:-1].reshape(-1, *self.state.shape[3:])
         obs = self.obs[:-1].reshape(-1, *self.obs.shape[3:])
-        rnn_hidden_states_actor = self.rnn_hidden_states_actor[:-1].reshape(
-            -1, *self.rnn_hidden_states_actor.shape[3:])
-        rnn_hidden_states_critic = self.rnn_hidden_states_critic[:-1].reshape(
-            -1, *self.rnn_hidden_states_critic.shape[3:])
+        rnn_states_actor = self.rnn_states_actor[:-1].reshape(
+            -1, *self.rnn_states_actor.shape[3:])
+        rnn_states_critic = self.rnn_states_critic[:-1].reshape(
+            -1, *self.rnn_states_critic.shape[3:])
         actions = self.actions.reshape(-1, self.actions.shape[-1])
         if self.available_actions is not None:
             available_actions = self.available_actions[:-1].reshape(
@@ -364,8 +347,8 @@ class SharedReplayBuffer(BaseBuffer):
             masks_batch = masks[indices]
             active_masks_batch = active_masks[indices]
             old_action_log_probs_batch = action_log_probs[indices]
-            rnn_hidden_states_actor_batch = rnn_hidden_states_actor[indices]
-            rnn_hidden_states_critic_batch = rnn_hidden_states_critic[indices]
+            rnn_states_actor_batch = rnn_states_actor[indices]
+            rnn_states_critic_batch = rnn_states_critic[indices]
             if advantages is None:
                 adv_targ = None
             else:
@@ -385,8 +368,8 @@ class SharedReplayBuffer(BaseBuffer):
                 active_masks_batch,
                 old_action_log_probs_batch,
                 available_actions_batch,
-                rnn_hidden_states_actor_batch,
-                rnn_hidden_states_critic_batch,
+                rnn_states_actor_batch,
+                rnn_states_critic_batch,
             )
 
     def naive_recurrent_generator(self, advantages: np.array,
@@ -418,10 +401,10 @@ class SharedReplayBuffer(BaseBuffer):
         action_log_probs = self.action_log_probs.reshape(
             -1, batch_size, self.action_log_probs.shape[-1])
         advantages = advantages.reshape(-1, batch_size, 1)
-        rnn_hidden_states_actor = self.rnn_hidden_states_actor.reshape(
-            -1, batch_size, *self.rnn_hidden_states_actor.shape[3:])
-        rnn_hidden_states_critic = self.rnn_hidden_states_critic.reshape(
-            -1, batch_size, *self.rnn_hidden_states_critic.shape[3:])
+        rnn_states_actor = self.rnn_states_actor.reshape(
+            -1, batch_size, *self.rnn_states_actor.shape[3:])
+        rnn_states_critic = self.rnn_states_critic.reshape(
+            -1, batch_size, *self.rnn_states_critic.shape[3:])
         for start_ind in range(0, batch_size, num_envs_per_batch):
             obs_batch = []
             state_batch = []
@@ -433,8 +416,8 @@ class SharedReplayBuffer(BaseBuffer):
             active_masks_batch = []
             old_action_log_probs_batch = []
             available_actions_batch = []
-            rnn_hidden_states_actor_batch = []
-            rnn_hidden_states_critic_batch = []
+            rnn_states_actor_batch = []
+            rnn_states_critic_batch = []
 
             for offset in range(num_envs_per_batch):
                 ind = perm[start_ind + offset]
@@ -449,10 +432,8 @@ class SharedReplayBuffer(BaseBuffer):
                 old_action_log_probs_batch.append(action_log_probs[:, ind])
                 if self.available_actions is not None:
                     available_actions_batch.append(available_actions[:-1, ind])
-                rnn_hidden_states_actor_batch.append(
-                    rnn_hidden_states_actor[0:1, ind])
-                rnn_hidden_states_critic_batch.append(
-                    rnn_hidden_states_critic[0:1, ind])
+                rnn_states_actor_batch.append(rnn_states_actor[0:1, ind])
+                rnn_states_critic_batch.append(rnn_states_critic[0:1, ind])
 
             # [N[T, dim]]
             T, N = self.episode_limit, num_envs_per_batch
@@ -471,12 +452,11 @@ class SharedReplayBuffer(BaseBuffer):
                 available_actions_batch = np.stack(available_actions_batch, 1)
 
             # States is just a (N, dim) from_numpy [N[1,dim]]
-            rnn_hidden_states_actor_batch = np.stack(
-                rnn_hidden_states_actor_batch).reshape(
-                    N, *self.rnn_hidden_states_actor.shape[3:])
-            rnn_hidden_states_critic_batch = np.stack(
-                rnn_hidden_states_critic_batch).reshape(
-                    N, *self.rnn_hidden_states_critic.shape[3:])
+            rnn_states_actor_batch = np.stack(rnn_states_actor_batch).reshape(
+                N, *self.rnn_states_actor.shape[3:])
+            rnn_states_critic_batch = np.stack(
+                rnn_states_critic_batch).reshape(
+                    N, *self.rnn_states_critic.shape[3:])
 
             # Flatten the (T, N, ...) from_numpys to (T * N, ...)
             obs_batch = _flatten(T, N, obs_batch)
@@ -506,8 +486,8 @@ class SharedReplayBuffer(BaseBuffer):
                 active_masks_batch,
                 old_action_log_probs_batch,
                 available_actions_batch,
-                rnn_hidden_states_actor_batch,
-                rnn_hidden_states_critic_batch,
+                rnn_states_actor_batch,
+                rnn_states_critic_batch,
             )
 
     def recurrent_generator(
@@ -549,13 +529,10 @@ class SharedReplayBuffer(BaseBuffer):
         returns = _cast(self.returns[:-1])
         masks = _cast(self.masks[:-1])
         active_masks = _cast(self.active_masks[:-1])
-        rnn_hidden_states_actor = (self.rnn_hidden_states_actor[:-1].transpose(
-            1, 2, 0, 3, 4).reshape(-1,
-                                   *self.rnn_hidden_states_actor.shape[3:]))
-        rnn_hidden_states_critic = (
-            self.rnn_hidden_states_critic[:-1].transpose(
-                1, 2, 0, 3,
-                4).reshape(-1, *self.rnn_hidden_states_critic.shape[3:]))
+        rnn_states_actor = (self.rnn_states_actor[:-1].transpose(
+            1, 2, 0, 3, 4).reshape(-1, *self.rnn_states_actor.shape[3:]))
+        rnn_states_critic = (self.rnn_states_critic[:-1].transpose(
+            1, 2, 0, 3, 4).reshape(-1, *self.rnn_states_critic.shape[3:]))
 
         if self.available_actions is not None:
             available_actions = _cast(self.available_actions[:-1])
@@ -571,8 +548,8 @@ class SharedReplayBuffer(BaseBuffer):
             active_masks_batch = []
             old_action_log_probs_batch = []
             available_actions_batch = []
-            rnn_hidden_states_actor_batch = []
-            rnn_hidden_states_critic_batch = []
+            rnn_states_actor_batch = []
+            rnn_states_critic_batch = []
 
             for index in indices:
                 ind = index * data_chunk_length
@@ -593,10 +570,8 @@ class SharedReplayBuffer(BaseBuffer):
                     available_actions_batch.append(
                         available_actions[ind:ind + data_chunk_length])
                 # size [T+1 N M Dim]-->[T N M Dim]-->[N M T Dim]-->[N*M*T,Dim]-->[1,Dim]
-                rnn_hidden_states_actor_batch.append(
-                    rnn_hidden_states_actor[ind])
-                rnn_hidden_states_critic_batch.append(
-                    rnn_hidden_states_critic[ind])
+                rnn_states_actor_batch.append(rnn_states_actor[ind])
+                rnn_states_critic_batch.append(rnn_states_critic[ind])
 
             L, N = data_chunk_length, mini_batch_size
 
@@ -615,12 +590,11 @@ class SharedReplayBuffer(BaseBuffer):
                 available_actions_batch = np.stack(available_actions_batch,
                                                    axis=1)
             # States is just a (N, -1) from_numpy
-            rnn_hidden_states_actor_batch = np.stack(
-                rnn_hidden_states_actor_batch).reshape(
-                    N, *self.rnn_hidden_states_actor.shape[3:])
-            rnn_hidden_states_critic_batch = np.stack(
-                rnn_hidden_states_critic_batch).reshape(
-                    N, *self.rnn_hidden_states_critic.shape[3:])
+            rnn_states_actor_batch = np.stack(rnn_states_actor_batch).reshape(
+                N, *self.rnn_states_actor.shape[3:])
+            rnn_states_critic_batch = np.stack(
+                rnn_states_critic_batch).reshape(
+                    N, *self.rnn_states_critic.shape[3:])
 
             # Flatten the (L, N, ...) from_numpys to (L * N, ...)
             state_batch = _flatten(L, N, state_batch)
@@ -649,6 +623,6 @@ class SharedReplayBuffer(BaseBuffer):
                 active_masks_batch,
                 old_action_log_probs_batch,
                 available_actions_batch,
-                rnn_hidden_states_actor_batch,
-                rnn_hidden_states_critic_batch,
+                rnn_states_actor_batch,
+                rnn_states_critic_batch,
             )

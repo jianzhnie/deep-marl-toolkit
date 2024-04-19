@@ -27,7 +27,7 @@ class ACTLayer(nn.Module):
 
         if action_space.__class__.__name__ == 'Discrete':
             action_dim = action_space.n
-            self.action_out = CustomCategorical(args.input_dim, action_dim,
+            self.action_out = CustomCategorical(args.hidden_size, action_dim,
                                                 args.use_orthogonal, args.gain)
         elif action_space.__class__.__name__ == 'Box':
             self.mujoco_box = True

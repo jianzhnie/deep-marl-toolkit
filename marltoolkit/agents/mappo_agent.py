@@ -36,10 +36,6 @@ class MAPPOAgent(BaseAgent):
         self.max_grad_norm = args.max_grad_norm
         self.huber_delta = args.huber_delta
 
-        self.obs_space = args.obs_space
-        self.share_obs_space = args.state_space
-        self.action_space = args.action_space
-
         self.use_recurrent_policy = args.use_recurrent_policy
         self.use_max_grad_norm = args.use_max_grad_norm
         self.use_clipped_value_loss = args.use_clipped_value_loss
